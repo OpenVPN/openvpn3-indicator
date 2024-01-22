@@ -1,0 +1,563 @@
+#!/usr/bin/env python3
+# vim:ts=4:sts=4:sw=4:expandtab
+
+import argparse
+import gettext
+import locale
+import logging
+import os
+import pathlib
+import pkg_resources
+import signal
+import subprocess
+import sys
+import traceback
+
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('AyatanaAppIndicator3', '0.1')
+from gi.repository import GLib, Gtk, GObject, AyatanaAppIndicator3 as AppIndicator3
+import secretstorage
+import webbrowser
+
+import openvpn3
+
+PROGRAM_NAME = 'openvpn3-indicator'
+VERSION = '0.1'
+PROJECT_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
+
+class Application():
+    def __init__(self, args):
+        self.dbus = dbus.SystemBus()
+        self.config_manager = openvpn3.ConfigurationManager(self.dbus)
+        self.session_manager = openvpn3.SessionManager(self.dbus)
+        self.session_manager.SessionManagerCallback(self.on_session_manager_event)
+        #TODO: What can you do with Network Change Events?
+        #self.network_manager = openvpn3.NetCfgManager(self.dbus)
+        #self.network_manager.SubscribeNetworkChange(self.on_network_manager_event)
+
+        secret_connection = secretstorage.dbus_init()
+        self.secret_collection = secretstorage.get_default_collection(secret_connection)
+
+        self.configs = dict()
+        self.sessions = dict()
+        self.config_names = dict()
+        self.name_configs = dict()
+        self.config_sessions = dict()
+        self.session_configs = dict()
+        self.session_failed_authentications = set()
+        self.session_dialogs = dict()
+        self.session_statuses = dict()
+
+        self.indicator = self.construct_indicator()
+
+        self.invalid_sessions = True
+        self.invalid_ui = True
+
+        GLib.timeout_add(1000, self.on_schedule)
+
+    def refresh_ui(self):
+        if self.invalid_ui:
+            self.menu = self.construct_menu()
+            self.indicator.set_menu(self.menu)
+            self.invalid_ui = False
+
+    def refresh_sessions(self):
+        if self.invalid_sessions:
+            try:
+                new_session_ids = set()
+                new_sessions = dict()
+                for session in self.session_manager.FetchAvailableSessions():
+                    session_id = str(session.GetPath())
+                    if session_id not in self.sessions:
+                        new_sessions[session_id] = session
+                        session.StatusChangeCallback(lambda major, minor, message: self.on_session_event(session_id, major, minor, message))
+                        new_session_ids.add(session_id)
+                    else:
+                        new_sessions[session_id] = self.sessions[session_id]
+                new_configs = dict()
+                for config in self.config_manager.FetchAvailableConfigs():
+                    config_id = str(config.GetPath())
+                    if config_id not in self.configs:
+                        new_configs[config_id] = config
+                    else:
+                        new_configs[config_id] = self.configs[config_id]
+                new_config_names = dict()
+                for config_id, config in new_configs.items():
+                    config_name = str(config.GetConfigName())
+                    new_config_names[config_id] = config_name
+                new_config_sessions = dict()
+                new_session_configs = dict()
+                for config_id, config_name in new_config_names.items():
+                    new_config_sessions[config_id] = list()
+                    for session_id in self.session_manager.LookupConfigName(config_name):
+                        session_id = str(session_id)
+                        new_config_sessions[config_id].append(session_id)
+                        new_session_configs[session_id] = config_id
+                new_session_statuses = dict()
+                for session_id, session in new_sessions.items():
+                    new_session_statuses[session_id] = session.GetStatus()
+                self.sessions = new_sessions
+                self.configs = new_configs
+                self.config_names = new_config_names
+                self.name_configs = dict([(value, key) for key,value in new_config_names.items()])
+                self.config_sessions = new_config_sessions
+                self.session_configs = new_session_configs
+                self.session_statuses = new_session_statuses
+
+                logging.debug(f'Configs: {sorted(self.configs.keys())}')
+                logging.debug(f'Sessions: {sorted(self.sessions.keys())}')
+                logging.debug(f'Config names: {self.config_names}')
+                logging.debug(f'Config sessions: {self.config_sessions}')
+                logging.debug(f'Session configs: {self.session_configs}')
+                logging.debug(f'Session statuses: {self.session_statuses}')
+                self.invalid_sessions = False
+                self.invalid_ui = True
+            except: #TODO: Catch only expected exceptions
+                logging.debug(traceback.format_exc())
+                logging.warning(f'Session list refresh failed')
+            for session_id in new_session_ids:
+                session_status = self.session_statuses[session_id]
+                self.on_session_event(session_id, session_status['major'], session_status['minor'], session_status['message'])
+            for session_id, dialog in list(self.session_dialogs.items()):
+                if session_id not in self.sessions:
+                    dialog.destroy()
+                    if session_id not in self.sessions:
+                        del self.session_dialogs[session_id]
+
+    def get_config_name(self, config_id):
+        return self.config_names.get(config_id, gettext.gettext('UNKNOWN'))
+
+    def get_session_name(self, session_id):
+        return self.get_config_name(self.session_configs.get(session_id, ''))
+
+    def construct_menu_session(self, config_id, session_id):
+        menu = Gtk.Menu()
+        status = self.session_statuses[session_id]
+        major = status['major']
+        minor = status['minor']
+
+        if False: #TODO: When does it make sense to allow explicit Connect?
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Connect'))
+            menu_item.connect('activate', self.action_session_connect, session_id)
+            menu.append(menu_item)
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_CONNECTED == minor:
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Pause'))
+            menu_item.connect('activate', self.action_session_pause, session_id)
+            menu.append(menu_item)
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_PAUSED == minor:
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Resume'))
+            menu_item.connect('activate', self.action_session_resume, session_id)
+            menu.append(menu_item)
+        if True:
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Restart'))
+            menu_item.connect('activate', self.action_session_restart, session_id)
+            menu.append(menu_item)
+        if True:
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Disconnect'))
+            menu_item.connect('activate', self.action_session_disconnect, session_id)
+            menu.append(menu_item)
+        return menu
+
+    def construct_menu(self):
+        menu = Gtk.Menu()
+        for config_name, config_id in sorted(self.name_configs.items()):
+            session_ids = self.config_sessions[config_id]
+            if len(session_ids) > 0:
+                for session_id in session_ids:
+                    #TODO: Add some information on session status to menu items (perhaps in the title?)
+                    session = self.sessions[session_id]
+                    config_menu = self.construct_menu_session(config_id, session_id)
+                    menu_item = Gtk.MenuItem.new_with_label(config_name)
+                    menu_item.set_submenu(config_menu)
+                    menu.append(menu_item)
+            else:
+                menu_item = Gtk.MenuItem.new_with_label(config_name)
+                menu_item.connect('activate', self.action_config_connect, config_id)
+                menu.append(menu_item)
+        if len(self.name_configs) > 0:
+            menu.append(Gtk.SeparatorMenuItem())
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
+        menu_item.connect('activate', self.action_config_import)
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
+        menu_item.connect('activate', self.action_about)
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
+        menu_item.connect('activate', Gtk.main_quit)
+        menu.append(menu_item)
+        menu.show_all()
+        return menu
+
+    def construct_indicator(self):
+        indicator = AppIndicator3.Indicator.new(
+                PROGRAM_NAME,
+                PROGRAM_NAME,
+                AppIndicator3.IndicatorCategory.APPLICATION_STATUS)
+        indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        return indicator
+
+    def on_session_manager_event(self, event):
+        logging.info(f'Session Manager Event {event}')
+        event_type = event.GetType()
+        if openvpn3.SessionManagerEventType.SESS_CREATED == event_type:
+            self.invalid_sessions = True
+        elif openvpn3.SessionManagerEventType.SESS_DESTROYED == event_type:
+            self.invalid_sessions = True
+    
+    def on_network_manager_event(self, event):
+        logging.info(f'Network Manager Event {event}')
+
+    def on_session_event(self, session_id, major, minor, message):
+        major = openvpn3.StatusMajor(major)
+        minor = openvpn3.StatusMinor(minor)
+        logging.info(f'Session Event {major} {minor} {message}')
+        self.session_statuses[session_id] = {
+            'major' : major,
+            'minor' : minor,
+            'message' : message,
+        }
+        self.invalid_ui = True
+        
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
+            pass
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
+            self.action_auth_url(None, session_id, message)
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
+            pass
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
+            #TODO: Notify authentication failure
+            #TODO: Record authentication failure
+            self.action_session_disconnect(None, session_id)
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
+            #TODO: Notify connection failure
+            #TODO: Record connection failure
+            self.action_session_disconnect(None, session_id)
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
+            pass
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
+            session = self.sessions[session_id]
+            try:
+                required_credentials = list()
+                for input_slot in session.FetchUserInputSlots():
+                    if input_slot.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
+                        continue
+                    description = str(input_slot.GetLabel())
+                    mask = bool(input_slot.GetInputMask())
+                    required_credentials.append((description, mask))
+            except: #TODO: Catch only expected exceptions
+                logging.debug(traceback.format_exc())
+                #TODO except only session problems
+                #TODO: Notify authentication failure
+                #TODO: Record authentication failure
+                self.action_session_disconnect(None, session_id)
+
+            self.action_get_credentials(None, session_id, required_credentials)#, force_ui=True)
+
+    def action_auth_url(self, _object, session_id, url):
+        webbrowser.open_new(url)
+
+    def store_set_credentials(self, config_id, credentials):
+        if self.secret_collection.is_locked():
+            self.secret_collection.unlock()
+        for key, value in credentials.items():
+            attrs = {
+                'application': PROGRAM_NAME,
+                'config': str(config_id),
+                'key' : str(key),
+            }
+            label = f'OpenVPN3 Indicator {config_id} {key}'
+            self.secret_collection.create_item(
+                    label,
+                    attrs,
+                    bytes(str(value), 'utf-8'),
+                    replace=True)
+            logging.debug(f'Storing secret {label}')
+
+    def store_clear_credentials(self, config_id):
+        if self.secret_collection.is_locked():
+            self.secret_collection.unlock()
+        secrets = list(self.secret_collection.search_items({'application': PROGRAM_NAME, 'config': str(config_id)}))
+        for secret in secrets:
+            secret_attrs = secret.get_attributes()
+            if secret_attrs.get('application', '') != PROGRAM_NAME:
+                continue
+            if secret_attrs.get('config', '') != config_id:
+                continue
+            logging.debug(f'Cleared secret {secret.get_label()}')
+            secret.delete()
+
+    def store_get_credentials(self, config_id):
+        credentials = dict()
+        if self.secret_collection.is_locked():
+            self.secret_collection.unlock()
+        secrets = list(self.secret_collection.search_items({'application': PROGRAM_NAME, 'config': str(config_id)}))
+        for secret in secrets:
+            secret_attrs = secret.get_attributes()
+            if secret_attrs.get('application', '') != PROGRAM_NAME:
+                continue
+            if secret_attrs.get('config', '') != config_id:
+                continue
+            secret_key = secret_attrs.get('key', '')
+            if secret_key:
+                logging.debug(f'Retrieved secret {secret.get_label()}')
+                credentials[secret_key] = str(secret.get_secret(), 'utf-8')
+        return credentials
+
+    def action_get_credentials(self, _object, session_id, required_credentials, force_ui=False):
+        credentials = dict()
+        required_keys = set([ description for description, mask in required_credentials ])
+        config_id = self.session_configs.get(session_id, None)
+        if config_id is not None:
+            for key, value in self.store_get_credentials(config_id).items():
+                if key in required_keys:
+                    credentials[key] = value
+
+        require_ui = False
+        for key in required_keys:
+            if key not in credentials:
+                require_ui = True
+                break
+
+        if require_ui or force_ui:
+            dialog = Gtk.Dialog(gettext.gettext('OpenVPN Credentials'))
+            dialog.add_buttons(Gtk.STOCK_CONNECT, Gtk.ResponseType.ACCEPT, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+            dialog.set_icon_name(PROGRAM_NAME)
+            dialog.set_position(Gtk.WindowPosition.CENTER)
+            content_area = dialog.get_content_area()
+            content_area.set_property('hexpand', True)
+            content_area.set_property('vexpand', True)
+            grid = Gtk.Grid(row_spacing=10, column_spacing=10, vexpand=True, hexpand=True, margin_top=20, margin_right=20, margin_bottom=20, margin_left=20)
+            session_name = self.get_session_name(session_id)
+            introduction = f'Session {session_name} requires providing credentials'
+            grid.attach(Gtk.Label(label=introduction, hexpand=True), 0, 0, 2, 1)
+            row = 1
+            entries = dict()
+            for description, mask in required_credentials:
+                label = Gtk.Label(label=description, hexpand=True, xalign=0, margin_right=10)
+                grid.attach(label, 0, row, 1, 1)
+                entry = Gtk.Entry(hexpand=True)
+                if mask:
+                    entry.set_visibility(False)
+                if description in credentials:
+                    entry.set_text(credentials[description])
+                grid.attach(entry, 1, row, 1, 1)
+                entries[description] = entry
+                row += 1
+            store_button = Gtk.CheckButton(label='Store credentials', hexpand=True)
+            if len(credentials) > 0:
+                store_button.set_active(True)
+            else:
+                store_button.set_active(False)
+            grid.attach(store_button, 0, row, 2, 1)
+            content_area.add(grid)
+
+            def on_destroy(_object):
+                self.action_session_disconnect(None, session_id)
+                if session_id in self.session_dialogs:
+                    del self.session_dialogs[session_id]
+            dialog.connect('destroy', on_destroy)
+            def on_response(_object, response):
+                if response == Gtk.ResponseType.CANCEL:
+                    self.action_session_disconnect(None, session_id)
+                    self.session_dialogs[session_id].disconnect_by_func(on_destroy)
+                    self.session_dialogs[session_id].destroy()
+                    if session_id in self.session_dialogs:
+                        del self.session_dialogs[session_id]
+                    return
+                credentials = dict()
+                for description, entry in entries.items():
+                    credentials[description] = entry.get_text()
+                    if not credentials[description]:
+                        return
+                if store_button.get_active():
+                    self.store_set_credentials(config_id, credentials)
+                else:
+                    self.store_clear_credentials(config_id)
+                self.session_dialogs[session_id].disconnect_by_func(on_destroy)
+                self.session_dialogs[session_id].destroy()
+                if session_id in self.session_dialogs:
+                    del self.session_dialogs[session_id]
+                self.on_session_credentials(session_id, credentials)
+            dialog.connect('response', on_response)
+            dialog.set_keep_above(True)
+            dialog.show_all()
+            if session_id in self.session_dialogs:
+                self.session_dialogs[session_id].destroy()
+                if session_id in self.session_dialogs:
+                    del self.session_dialogs[session_id]
+            self.session_dialogs[session_id] = dialog
+        else:
+            self.on_session_credentials(session_id, credentials)
+
+    def on_session_credentials(self, session_id, credentials):
+        session = self.sessions[session_id]
+        try:
+            for input_slot in session.FetchUserInputSlots():
+                if input_slot.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
+                    continue
+                input_slot.ProvideInput(credentials.get(input_slot.GetLabel(), ''))
+            session.Connect()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            self.action_session_disconnect(None, session_id)
+
+    def on_schedule(self):
+        logging.debug(f'Schedule')
+        if self.invalid_sessions:
+            self.refresh_sessions()
+        if self.invalid_ui:
+            self.refresh_ui()
+        GLib.timeout_add(1000, self.on_schedule)
+
+    def action_config_connect(self, _object, config_id):
+        logging.info(f'Connect Config {config_id}')
+        if config_id not in self.configs:
+            return
+        try:
+            self.session_manager.NewTunnel(self.configs[config_id])
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_session_connect(self, _object, session_id):
+        logging.info(f'Connect Session {session_id}')
+        if session_id not in self.sessions:
+            return
+        try:
+            self.sessions[session_id].Connect()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_session_pause(self, _object, session_id):
+        logging.info(f'Pause Session {session_id}')
+        if session_id not in self.sessions:
+            return
+        try:
+            self.sessions[session_id].Pause()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_session_resume(self, _object, session_id):
+        logging.info(f'Resume Session {session_id}')
+        if session_id not in self.sessions:
+            return
+        try:
+            self.sessions[session_id].Resume()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_session_restart(self, _object, session_id):
+        logging.info(f'Restart Session {session_id}')
+        if session_id not in self.sessions:
+            return
+        try:
+            self.sessions[session_id].Restart()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_session_disconnect(self, _object, session_id):
+        logging.info(f'Disconnect Session {session_id}')
+        if session_id not in self.sessions:
+            return
+        try:
+            self.sessions[session_id].Disconnect()
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_config_import(self, _object):
+        logging.info(f'Import Config')
+        dialog = Gtk.FileChooserDialog(action=Gtk.FileChooserAction.OPEN)
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,
+            Gtk.ResponseType.OK,
+        )
+        dialog.set_icon_name(PROGRAM_NAME)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
+        dialog.show_all()
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            config_path = dialog.get_filename()
+            dialog.destroy()
+            config_name = 'NEW'
+            config_single_use = False
+            config_persistent = True
+            #TODO: Second dialog to select name, single_use, persistent
+            dialog2 = Gtk.Dialog()
+            dialog2 = Gtk.Dialog(gettext.gettext('OpenVPN Configuration Import'))
+            dialog2.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+            dialog2.set_icon_name(PROGRAM_NAME)
+            dialog2.set_position(Gtk.WindowPosition.CENTER)
+            content_area = dialog2.get_content_area()
+            content_area.set_property('hexpand', True)
+            content_area.set_property('vexpand', True)
+            grid = Gtk.Grid(row_spacing=10, column_spacing=10, vexpand=True, hexpand=True, margin_top=20, margin_right=20, margin_bottom=20, margin_left=20)
+            grid.attach(Gtk.Label(label=config_path, hexpand=True), 0, 0, 2, 1)
+            label = Gtk.Label(label=gettext.gettext('Configuration Name'), hexpand=True, xalign=0, margin_right=10)
+            grid.attach(label, 0, 1, 1, 1)
+            entry = Gtk.Entry(hexpand=True)
+            entry.set_text(config_name)
+            grid.attach(entry, 1, 1, 1, 1)
+            single_use_button = Gtk.CheckButton(label=gettext.gettext('Single use'), hexpand=True)
+            single_use_button.set_active(config_single_use)
+            grid.attach(single_use_button, 0, 2, 2, 1)
+            persistent_button = Gtk.CheckButton(label=gettext.gettext('Persistent'), hexpand=True)
+            persistent_button.set_active(config_persistent)
+            grid.attach(persistent_button, 0, 3, 2, 1)
+            content_area.add(grid)
+            dialog2.set_keep_above(True)
+            dialog2.show_all()
+            response2 = dialog2.run()
+            if response2 == Gtk.ResponseType.OK:
+                config_name = entry.get_text()
+                config_single_use = single_use_button.get_active()
+                config_persistent = persistent_button.get_active()
+                self.action_config_import_path(None, config_name, config_path, config_single_use, config_persistent)
+            dialog2.destroy()
+        else:
+            dialog.destroy()
+
+    def action_config_import_path(self, _object, config_name, config_path, config_single_use, config_persistent):
+        logging.info(f'Import Config Path')
+        try:
+            parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', config_path], '')
+            config_description = parser.GenerateConfig()
+            self.config_manager.Import(config_name, config_description, config_single_use, config_persistent)
+            self.invalid_sessions = True
+        except: #TODO: Catch only expected exceptions
+            logging.debug(traceback.format_exc())
+            pass
+
+    def action_about(self, _object):
+        logging.info(f'About')
+        webbrowser.open_new(PROJECT_URL)
+        pass
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description='OpenVPN3 Indicator')
+    parser.add_argument('-V', '--version', action='version', version=PROGRAM_NAME + ' ' + VERSION)
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='show more info')
+    parser.add_argument('-d', '--debug', action='store_true', default=False, help='show debug info')
+    parser.add_argument('-s', '--silent', action='store_true', default=False, help='show less info')
+    args = parser.parse_args()
+    level=logging.WARNING
+    if args.debug:
+        level = logging.DEBUG
+    elif args.verbose:
+        level = logging.INFO
+    elif args.silent:
+        level = logging.ERROR
+    logging.basicConfig(level = level)
+    DBusGMainLoop(set_as_default=True)
+    app = Application(args)
+    Gtk.main()
