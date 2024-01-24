@@ -1,35 +1,90 @@
 PROGRAM := openvpn3-indicator
-PREFIX ?= /usr
+PREFIX ?= /usr/local
 AUTOSTART ?= /etc/xdg/autostart
 
-SHARES := $(shell find share -type f -not -iname "*.[1-8]")
+SHARES := $(shell find share -type f -not -iname "*.[1-8]" -not -iname "*.desktop")
 MANS := $(shell find share -type f -iname "*.[1-8]")
-APPLICATION := $(shell find share -type f -iname $(PROGRAM).desktop)
+APPLICATIONS := $(shell find share -type f -iname "*.desktop")
+
 INSTALL_SHARES := $(patsubst %,$(PREFIX)/%,$(SHARES))
 INSTALL_MANS := $(patsubst %,$(PREFIX)/%.gz,$(MANS))
-INSTALL_APPLICATION := $(patsubst %,$(PREFIX)/%,$(APPLICATION))
+INSTALL_APPLICATIONS := $(patsubst %,$(PREFIX)/%,$(APPLICATIONS))
 INSTALL_AUTOSTART := $(AUTOSTART)/$(PROGRAM).desktop
 
-.PHONY: all
+DEVEL_SHARES := $(patsubst %,$(HOME)/.local/%,$(SHARES))
+#DEVEL_MANS := 
+DEVEL_APPLICATIONS := $(patsubst %,$(HOME)/.local/%,$(APPLICATIONS))
+DEVEL_AUTOSTART := $(HOME)/.config/autostart/$(PROGRAM).desktop
 
-all:
-
+.PHONY: default
+default:
+	@echo "This is Makefile for $(PROGRAM). It does nothing by default."
+	@echo
+	@echo "Use  ***  sudo make install  ***  to install $(PROGRAM) in $(PREFIX) for all users."
+	@echo
+	@echo "Use  ***  make devel  ***  to install symlinks to $(PROGRAM) in the current folder for the current user only."
+	@echo "This is the way for developers."
+	@echo
+	@echo "Use  ***  sudo make uninstall  ***  or  ***  make indevel  ***  to uninstall $(PROGRAM)."
+	@echo
 
 .PHONY: install
-
 install: $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
 
-
 $(PREFIX)/bin/$(PROGRAM) : $(PROGRAM)
-	install -D --mode 0755 $< $@
+	@install --directory $(dir $@)
+	install --mode 0755 $< $@
 
 $(INSTALL_SHARES): $(PREFIX)/% : %
-	install -D --mode 0644 $< $@
+	@install --directory $(dir $@)
+	install --mode 0644 $< $@
 	update-icon-caches $(PREFIX)/share/icons
 
 $(INSTALL_MANS): $(PREFIX)/%.gz : %
+	@install --directory $(dir $@)
 	gzip --stdout $< > $@
-	chmod 0644 $@
+	@chmod 0644 $@
 
-$(INSTALL_AUTOSTART): $(INSTALL_APPLICATION)
+$(INSTALL_APPLICATIONS): $(PREFIX)/% : %
+	@install --directory $(dir $@)
+	sed -E -e "s|/usr/|$(PREFIX)/|g" $< > $@
+	@chmod 0644 $@
+
+$(INSTALL_AUTOSTART) : $(PREFIX)/share/applications/$(PROGRAM).desktop
+	@install --directory $(dir $@)
 	ln --force --symbolic $< $@
+
+.PHONY: uninstall
+uninstall:
+	rm -f $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATIONS) $(INSTALL_AUTOSTART)
+	update-icon-caches $(PREFIX)/share/icons
+
+.PHONY: devel
+devel: $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
+
+$(HOME)/.local/bin/$(PROGRAM) : $(PROGRAM)
+	@install --directory $(dir $@)
+	ln --force --symbolic $(abspath $<) $@
+
+$(DEVEL_SHARES): $(HOME)/.local/% : %
+	@install --directory $(dir $@)
+	ln --force --symbolic $(abspath $<) $@
+
+$(DEVEL_APPLICATIONS): $(HOME)/.local/% : %
+	@install --directory $(dir $@)
+	sed -E -e "s|/usr/|$(HOME)/.local/|g" $< > $@
+	@chmod 0644 $@
+
+$(DEVEL_AUTOSTART) : $(HOME)/.local/share/applications/$(PROGRAM).desktop
+	@install --directory $(dir $@)
+	ln --force --symbolic $(abspath $<) $@
+
+.PHONY: undevel
+undevel:
+	rm -f $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
+	update-icon-caches $(PREFIX)/share/icons
+
+
+.PHONY: spellcheck
+spellcheck: README.md share/applications/*.desktop share/man/*/*.1
+	for file in $^; do aspell --home-dir=. --save-repl --lang=en_US.UTF-8 check $$file; done

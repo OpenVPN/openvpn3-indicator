@@ -4,23 +4,32 @@ Simple GTK indicator GUI for OpenVPN3.
 
 ## Description
 
-This project adds a simple GTK indicator that can be used to control OpenVPN3 tunnels.
-It is based on D-Bus interface provided by OpenVPN3 Linux client and does not require elevated provileges to use.
-It should be considered as a temporary work-around until Network Manager implements support for OpenVPN 3.
+This project adds a simple GTK indicator application that can be used to control OpenVPN3 tunnels.
+It is based on D-Bus interface provided by OpenVPN3 Linux client and does not require elevated privileges to use.
+It should be considered as a temporary work-around until Network Manager implements support for OpenVPN 3, or OpenVPN provides a graphical interface for Linux users.
 
 ## Prerequisites
 
-To use this project you have to install `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
-You can use [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) for popular distributions.
-You also need afe python libraries that are usually present in usual desktop installations.
+This application requires the installation of `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
+There are [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
+It also requires some standard python libraries that are usually present in desktop installations.
 
 ## Installation instructions
 
-You can use provided `Makefile` to install the program in `/usr`.
+You can use provided `Makefile` to install the application in `/usr/local` for all users.
 
 ```sh
-make -B install
+sudo make install
 ```
+
+You can also install symlinks to the current directory in `~/.local/` for the current user only.
+This is the way for developers, as it allows easy modifications of the application.
+
+```sh
+make devel
+```
+
+You can uninstall the application by running `sudo make uninstall` or `sudo make undevel`.
 
 ## Usage instructions
 
