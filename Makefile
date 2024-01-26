@@ -2,7 +2,7 @@ PROGRAM := openvpn3-indicator
 PREFIX ?= /usr/local
 AUTOSTART ?= /etc/xdg/autostart
 
-SHARES := $(shell find share -type f -not -iname "*.[1-8]" -not -iname "*.desktop")
+SHARES := $(shell find share -type f -not -iname "*.[1-8]" -not -iname "*.desktop" -not -iname "*.bak" -not -iname "*.swp")
 MANS := $(shell find share -type f -iname "*.[1-8]")
 APPLICATIONS := $(shell find share -type f -iname "*.desktop")
 
@@ -30,6 +30,7 @@ default:
 
 .PHONY: install
 install: $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
+	gtk-update-icon-cache $(PREFIX)/share/icons/*
 
 $(PREFIX)/bin/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
@@ -38,7 +39,6 @@ $(PREFIX)/bin/$(PROGRAM) : $(PROGRAM)
 $(INSTALL_SHARES): $(PREFIX)/% : %
 	@install --directory $(dir $@)
 	install --mode 0644 $< $@
-	update-icon-caches $(PREFIX)/share/icons
 
 $(INSTALL_MANS): $(PREFIX)/%.gz : %
 	@install --directory $(dir $@)
@@ -57,10 +57,11 @@ $(INSTALL_AUTOSTART) : $(PREFIX)/share/applications/$(PROGRAM).desktop
 .PHONY: uninstall
 uninstall:
 	rm -f $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATIONS) $(INSTALL_AUTOSTART)
-	update-icon-caches $(PREFIX)/share/icons
+	gtk-update-icon-cache $(PREFIX)/share/icons/*
 
 .PHONY: devel
 devel: $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
+	gtk-update-icon-cache $(HOME)/.local/share/icons/*
 
 $(HOME)/.local/bin/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
@@ -82,8 +83,7 @@ $(DEVEL_AUTOSTART) : $(HOME)/.local/share/applications/$(PROGRAM).desktop
 .PHONY: undevel
 undevel:
 	rm -f $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
-	update-icon-caches $(PREFIX)/share/icons
-
+	gtk-update-icon-cache $(HOME)/.local/share/icons/*
 
 .PHONY: spellcheck
 spellcheck: README.md share/applications/*.desktop share/man/*/*.1

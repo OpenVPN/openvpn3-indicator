@@ -29,7 +29,7 @@ This is the way for developers, as it allows easy modifications of the applicati
 make devel
 ```
 
-You can uninstall the application by running `sudo make uninstall` or `sudo make undevel`.
+You can uninstall the application by running `sudo make uninstall` or `make undevel`.
 
 ## Usage instructions
 
