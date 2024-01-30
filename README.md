@@ -12,7 +12,12 @@ It should be considered as a temporary work-around until Network Manager impleme
 
 This application requires the installation of `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
 There are [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
+
 It also requires some standard python libraries that are usually present in desktop installations.
+On Ubuntu/Debian systems it should be enough to use the following install command:
+```sh
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 python3-secretstorage
+```
 
 ## Installation instructions
 

@@ -29,6 +29,7 @@ PROJECT_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 #TODO: Ask for user confirmation when removing config (and maybe in some other places?)
 #TODO: Implement other than AyatanaAppIndicator ways to have system tray icon
 #TODO: Divide the script into smaller, more managable components
+#TODO: Prevent running multiple instances of the application
 
 class Application():
     def __init__(self, args):
