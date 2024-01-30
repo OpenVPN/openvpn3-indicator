@@ -22,6 +22,14 @@ PROGRAM_NAME = 'openvpn3-indicator'
 VERSION = '0.1'
 PROJECT_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 
+#TODO: Collect and present session logs and stats
+#TODO: Understand better the possible session state changes
+#TODO: Notify user on some of the session state changes
+#TODO: Present session state (change menu label?, add menu icons?, change indicator icon?)
+#TODO: Ask for user confirmation when removing config (and maybe in some other places?)
+#TODO: Implement other than AyatanaAppIndicator ways to have system tray icon
+#TODO: Divide the script into smaller, more managable components
+
 class Application():
     def __init__(self, args):
         self.dbus = dbus.SystemBus()
@@ -204,9 +212,9 @@ class Application():
 
     def construct_indicator(self):
         indicator = AppIndicator3.Indicator.new(
-                PROGRAM_NAME,
+                f'{PROGRAM_NAME}',
                 f'{PROGRAM_NAME}-panel',
-                AppIndicator3.IndicatorCategory.APPLICATION_STATUS)
+                AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
         indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         return indicator
 
@@ -263,7 +271,7 @@ class Application():
                     required_credentials.append((description, mask))
             except: #TODO: Catch only expected exceptions
                 logging.debug(traceback.format_exc())
-                #TODO except only session problems
+                #TODO: Catch only expected exceptions
                 #TODO: Notify authentication failure
                 #TODO: Record authentication failure
                 self.action_session_disconnect(None, session_id)
@@ -518,10 +526,11 @@ class Application():
         if response == Gtk.ResponseType.OK:
             config_path = dialog.get_filename()
             dialog.destroy()
+            #TODO: Deduce default config_name from config content
             config_name = 'NEW'
+            #TODO: Hide single_use and persistent from interface?
             config_single_use = False
             config_persistent = True
-            #TODO: Second dialog to select name, single_use, persistent
             dialog2 = Gtk.Dialog()
             dialog2 = Gtk.Dialog(gettext.gettext('OpenVPN Configuration Import'))
             dialog2.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
