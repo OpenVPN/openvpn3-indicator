@@ -232,7 +232,7 @@ class Application():
     def construct_indicator(self):
         indicator = AppIndicator3.Indicator.new(
                 f'{PROGRAM_NAME}',
-                f'{PROGRAM_NAME}-panel',
+                f'{PROGRAM_NAME}',
                 AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
         indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         return indicator
