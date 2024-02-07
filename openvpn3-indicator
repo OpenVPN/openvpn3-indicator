@@ -23,6 +23,7 @@
 import argparse
 import gettext
 import logging
+import sys
 import time
 import traceback
 import uuid
@@ -43,12 +44,13 @@ import webbrowser
 
 import openvpn3
 
-PROGRAM_NAME = 'openvpn3-indicator'
-VERSION = '0.1'
-PROJECT_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
+APPLICATION_NAME = 'openvpn3-indicator'
+APPLICATION_DESCRIPTION = 'OpenVPN3 Indicator'
+APPLICATION_ID = 'com.github.grzegorz_gutowski.openvpn3_indicator'
+APPLICATION_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
+APPLICATION_VERSION = '0.1'
 
-#TODO: Prevent running multiple instances of the application
-#TODO: Present session state (change menu label?, add menu icons?, change indicator icon?)
+#TODO: Present session state (change icon on errors, etc.)
 #TODO: Notify user on some of the session state changes
 #TODO: Ask for user confirmation when removing config (and maybe in some other places?)
 #TODO: Collect and present session logs and stats
@@ -58,6 +60,12 @@ PROJECT_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 
 DEFAULT_CONFIG_NAME = gettext.gettext('UNKNOWN')
 DEFAULT_SESSION_NAME = gettext.gettext('UNKNOWN')
+
+###
+#
+# MultiIndicator
+#
+###
 
 class MultiIndicator():
     @property
@@ -220,9 +228,48 @@ class MultiIndicator():
                 self.hide_indicator(other)
             self.invalid=False
 
-class Application():
-    def __init__(self, args):
+###
+#
+# Application
+#
+###
+
+class Application(Gtk.Application):
+    def __init__(self):
+        Gtk.Application.__init__(self,
+            application_id=APPLICATION_ID
+            )
+        self.add_main_option('version', ord('V'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show version and exit", None)
+        self.add_main_option('verbose', ord('v'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show more info", None)
+        self.add_main_option('debug', ord('d'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show debug info", None)
+        self.add_main_option('silent', ord('s'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show less info", None)
+        self.connect('handle-local-options', self.on_local_options)
+        self.connect('startup', self.on_startup)
+        self.connect('activate', self.on_activate)
+
+    def on_local_options(self, application, options):
+        options = options.end().unpack()
+        level=logging.WARNING
+        if options.get('version', False):
+            print(f'{APPLICATION_NAME} {APPLICATION_VERSION}')
+            return 0
+        if options.get('debug', False):
+            level = logging.DEBUG
+        elif options.get('silent', False):
+            level = logging.INFO
+        elif options.get('verbose', False):
+            level = logging.ERROR
+        logging.basicConfig(level = level)
+        return -1
+
+    def on_activate(self, data):
+        logging.info(f'Activate')
+
+    def on_startup(self, data):
+        logging.info(f'Startup')
+        DBusGMainLoop(set_as_default=True)
         self.dbus = dbus.SystemBus()
+        #self.dbus = self.get_dbus_connection()
         self.config_manager = openvpn3.ConfigurationManager(self.dbus)
         self.session_manager = openvpn3.SessionManager(self.dbus)
         self.session_manager.SessionManagerCallback(self.on_session_manager_event)
@@ -243,20 +290,21 @@ class Application():
         self.session_dialogs = dict()
         self.session_statuses = dict()
 
-        self.multi_indicator = MultiIndicator(f'{PROGRAM_NAME}')
+        self.multi_indicator = MultiIndicator(f'{APPLICATION_NAME}')
         self.default_indicator = self.multi_indicator.new_indicator()
-        self.default_indicator.icon=f'{PROGRAM_NAME}-idle'
-        self.default_indicator.description=f'{PROGRAM_NAME}'
-        self.default_indicator.title=f'{PROGRAM_NAME}'
+        self.default_indicator.icon=f'{APPLICATION_NAME}-idle'
+        self.default_indicator.description=f'{APPLICATION_NAME}'
+        self.default_indicator.title=f'{APPLICATION_NAME}'
         self.default_indicator.order_key='0'
         self.default_indicator.active=True
         self.indicators = dict()
-        
+
         self.last_invalid = time.monotonic()
         self.invalid_sessions = True
         self.invalid_ui = True
 
         GLib.timeout_add(1000, self.on_schedule)
+        self.hold()
 
     def refresh_ui(self):
         if self.invalid_ui:
@@ -266,9 +314,9 @@ class Application():
                 if indicator is None:
                     session_name = self.get_session_name(session_id)
                     indicator = self.multi_indicator.new_indicator()
-                    indicator.icon=f'{PROGRAM_NAME}-active'
-                    indicator.description=f'{PROGRAM_NAME}: {session_name}'
-                    indicator.title=f'{PROGRAM_NAME}: {session_name}'
+                    indicator.icon=f'{APPLICATION_NAME}-active'
+                    indicator.description=f'{APPLICATION_NAME}: {session_name}'
+                    indicator.title=f'{APPLICATION_NAME}: {session_name}'
                     indicator.order_key=f'1-{session_name}-{session_id}'
                     indicator.active=True
                 new_indicators[session_id] = indicator
@@ -466,7 +514,7 @@ class Application():
             self.invalid_sessions = True
         elif openvpn3.SessionManagerEventType.SESS_DESTROYED == event_type:
             self.invalid_sessions = True
-    
+
     def on_network_manager_event(self, event):
         logging.info(f'Network Manager Event {event}')
 
@@ -481,7 +529,7 @@ class Application():
             'message' : message,
         }
         self.invalid_ui = True
-        
+
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
             pass
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
@@ -527,7 +575,7 @@ class Application():
             self.secret_collection.unlock()
         for key, value in credentials.items():
             attrs = {
-                'application': PROGRAM_NAME,
+                'application': APPLICATION_NAME,
                 'config': str(config_id),
                 'key' : str(key),
             }
@@ -542,10 +590,10 @@ class Application():
     def store_clear_credentials(self, config_id):
         if self.secret_collection.is_locked():
             self.secret_collection.unlock()
-        secrets = list(self.secret_collection.search_items({'application': PROGRAM_NAME, 'config': str(config_id)}))
+        secrets = list(self.secret_collection.search_items({'application': APPLICATION_NAME, 'config': str(config_id)}))
         for secret in secrets:
             secret_attrs = secret.get_attributes()
-            if secret_attrs.get('application', '') != PROGRAM_NAME:
+            if secret_attrs.get('application', '') != APPLICATION_NAME:
                 continue
             if secret_attrs.get('config', '') != config_id:
                 continue
@@ -556,10 +604,10 @@ class Application():
         credentials = dict()
         if self.secret_collection.is_locked():
             self.secret_collection.unlock()
-        secrets = list(self.secret_collection.search_items({'application': PROGRAM_NAME, 'config': str(config_id)}))
+        secrets = list(self.secret_collection.search_items({'application': APPLICATION_NAME, 'config': str(config_id)}))
         for secret in secrets:
             secret_attrs = secret.get_attributes()
-            if secret_attrs.get('application', '') != PROGRAM_NAME:
+            if secret_attrs.get('application', '') != APPLICATION_NAME:
                 continue
             if secret_attrs.get('config', '') != config_id:
                 continue
@@ -587,7 +635,7 @@ class Application():
         if require_ui or force_ui:
             dialog = Gtk.Dialog(gettext.gettext('OpenVPN Credentials'))
             dialog.add_buttons(Gtk.STOCK_CONNECT, Gtk.ResponseType.ACCEPT, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-            dialog.set_icon_name(PROGRAM_NAME)
+            dialog.set_icon_name(APPLICATION_NAME)
             dialog.set_position(Gtk.WindowPosition.CENTER)
             content_area = dialog.get_content_area()
             content_area.set_property('hexpand', True)
@@ -759,7 +807,7 @@ class Application():
             Gtk.STOCK_OPEN,
             Gtk.ResponseType.OK,
         )
-        dialog.set_icon_name(PROGRAM_NAME)
+        dialog.set_icon_name(APPLICATION_NAME)
         dialog.set_position(Gtk.WindowPosition.CENTER)
         dialog.set_keep_above(True)
         dialog.show_all()
@@ -775,7 +823,7 @@ class Application():
             dialog2 = Gtk.Dialog()
             dialog2 = Gtk.Dialog(gettext.gettext('OpenVPN Configuration Import'))
             dialog2.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-            dialog2.set_icon_name(PROGRAM_NAME)
+            dialog2.set_icon_name(APPLICATION_NAME)
             dialog2.set_position(Gtk.WindowPosition.CENTER)
             content_area = dialog2.get_content_area()
             content_area.set_property('hexpand', True)
@@ -819,24 +867,15 @@ class Application():
 
     def action_about(self, _object):
         logging.info(f'About')
-        webbrowser.open_new(PROJECT_URL)
+        webbrowser.open_new(APPLICATION_URL)
         pass
 
+###
+#
+# Main
+#
+###
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description='OpenVPN3 Indicator')
-    parser.add_argument('-V', '--version', action='version', version=PROGRAM_NAME + ' ' + VERSION)
-    parser.add_argument('-v', '--verbose', action='store_true', default=False, help='show more info')
-    parser.add_argument('-d', '--debug', action='store_true', default=False, help='show debug info')
-    parser.add_argument('-s', '--silent', action='store_true', default=False, help='show less info')
-    args = parser.parse_args()
-    level=logging.WARNING
-    if args.debug:
-        level = logging.DEBUG
-    elif args.verbose:
-        level = logging.INFO
-    elif args.silent:
-        level = logging.ERROR
-    logging.basicConfig(level = level)
-    DBusGMainLoop(set_as_default=True)
-    app = Application(args)
-    Gtk.main()
+    app = Application()
+    app.run(sys.argv)
