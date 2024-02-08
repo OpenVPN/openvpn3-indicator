@@ -50,6 +50,7 @@ APPLICATION_ID = 'com.github.grzegorz_gutowski.openvpn3_indicator'
 APPLICATION_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 APPLICATION_VERSION = '0.1'
 
+#TODO: Handle opens on *.ovpn files
 #TODO: Present session state (change icon on errors, etc.)
 #TODO: Notify user on some of the session state changes
 #TODO: Ask for user confirmation when removing config (and maybe in some other places?)
@@ -57,6 +58,7 @@ APPLICATION_VERSION = '0.1'
 #TODO: Understand better the possible session state changes
 #TODO: Implement other than AppIndicator ways to have system tray icon
 #TODO: Divide the script into smaller, more managable components
+#TODO: Prepare packaging for Debian/Ubuntu/Fedora (Github + Launchpad / Copr)
 
 DEFAULT_CONFIG_NAME = gettext.gettext('UNKNOWN')
 DEFAULT_SESSION_NAME = gettext.gettext('UNKNOWN')
@@ -471,7 +473,7 @@ class Application(Gtk.Application):
         menu_item.connect('activate', self.action_about)
         menu.append(menu_item)
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
-        menu_item.connect('activate', Gtk.main_quit)
+        menu_item.connect('activate', self.action_quit)
         menu.append(menu_item)
         menu.show_all()
         return menu
@@ -502,7 +504,7 @@ class Application(Gtk.Application):
         menu_item.connect('activate', self.action_about)
         menu.append(menu_item)
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
-        menu_item.connect('activate', Gtk.main_quit)
+        menu_item.connect('activate', self.action_quit)
         menu.append(menu_item)
         menu.show_all()
         return menu
@@ -868,7 +870,10 @@ class Application(Gtk.Application):
     def action_about(self, _object):
         logging.info(f'About')
         webbrowser.open_new(APPLICATION_URL)
-        pass
+
+    def action_quit(self, _object):
+        logging.info(f'Quit')
+        self.release()
 
 ###
 #
