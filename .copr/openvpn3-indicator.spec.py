@@ -20,30 +20,41 @@
 # If not, see <https://www.gnu.org/licenses/>.
 #
 
+import argparse
 import os
 import pathlib
 import re
 import subprocess
 
+parser = argparse.ArgumentParser(description='KOLEJKA foreman')
+parser.add_argument('--scriptdir', default=os.getcwd())
+parser.add_argument('--outdir', default=os.getcwd())
+args = parser.parse_args()
+scriptdir=pathlib.Path(args.scriptdir)
+outdir=pathlib.Path(args.outdir)
+gitdir=scriptdir.parent
+
+
+
 os.environ['TZ'] = 'UTC'
 os.environ['LC_ALL'] = 'en_US.UTF-8'
 
-subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', os.getcwd()])
+subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitdir)])
 
-timestamp_run = subprocess.run(['git', 'log', '-n', '1', '--format=format:%cd', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
+timestamp_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:%cd', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
 TIMESTAMP = str(timestamp_run.stdout, 'utf-8').strip()
 
-icon_path = pathlib.Path('share/icons')
+icon_path = gitdir / 'share' / 'icons'
 ICON_THEMES = [ str(p.relative_to(icon_path)) for p in icon_path.glob('*') if p.is_dir() ]
 ICONS = [ str(p.relative_to(icon_path.parent)) for p in icon_path.glob('**/*.svg') if p.is_file() ]
 
-mime_path = pathlib.Path('share/mime')
+mime_path = gitdir / 'share' / 'mime'
 MIMES = [ str(p.relative_to(mime_path.parent)) for p in mime_path.glob('**/*.xml') if p.is_file() ]
 
-app_path = pathlib.Path('share/applications')
+app_path = gitdir / 'share' / 'applications'
 APPS = [ str(p.relative_to(app_path.parent)) for p in app_path.glob('**/*.desktop') if p.is_file() ]
 
-man_path = pathlib.Path('share/man')
+man_path = gitdir / 'share' / 'man'
 MANS = [ str(p.relative_to(man_path.parent)) for p in man_path.glob('**/*.[1-8]') if p.is_file() ]
 
 NAME      = 'openvpn3-indicator'
@@ -75,8 +86,8 @@ SOURCES = [
     'README.md',
     'share',
 ]
-SOURCECODE = f'.copr/openvpn3-indicator-{VERSION}.tar.gz'
-source_run = subprocess.run(['tar', '--create', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|'] + SOURCES)
+SOURCECODE = outdir / f'openvpn3-indicator-{VERSION}.tar.gz'
+source_run = subprocess.run(['tar', '--create', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|', '--directory', str(gitdir) ] + SOURCES)
 
 PREP = '\n'.join([
         '%setup'
@@ -120,10 +131,10 @@ FILES = '\n'.join([
     ])
 
 
-changelog_run = subprocess.run(['git', 'log', '-n', '1', '--format=format:* %cd %an <%ae> - '+VERSION+'-'+re.sub(r'%','%%',RELEASE)+'%n- %s%b%n', '--date=format-local:%a %b %d %Y'], capture_output=True)
+changelog_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:* %cd %an <%ae> - '+VERSION+'-'+re.sub(r'%','%%',RELEASE)+'%n- %s%b%n', '--date=format-local:%a %b %d %Y'], capture_output=True)
 CHANGELOG = str(changelog_run.stdout, 'utf-8').strip()
 
-print(f'''
+(outdir / 'openvpn3-indicator.spec').write_text(f'''
 Name: {NAME}
 Version: {VERSION}
 Release: {RELEASE}
