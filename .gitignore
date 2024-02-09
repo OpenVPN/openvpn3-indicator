@@ -1,2 +1,5 @@
 *.bak
 *.swp
+/.copr/*.spec
+/.copr/*.tar.gz
+/.copr/*.rpm
