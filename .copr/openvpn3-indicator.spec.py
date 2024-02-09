@@ -71,6 +71,9 @@ URL       = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 BUILDARCH = 'noarch'
 BUILDREQUIRES = ' '.join(sorted([
         'desktop-file-utils',
+        'make',
+        'sed',
+        'python'
     ]))
 REQUIRES  = ' '.join(sorted([
         'openvpn3',
