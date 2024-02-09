@@ -30,7 +30,9 @@ default:
 
 .PHONY: install
 install: $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
-	gtk-update-icon-cache $(PREFIX)/share/icons/*
+	update-desktop-database $(PREFIX)/share/applications
+	update-mime-database $(PREFIX)/share/mime
+	gtk-update-icon-cache -f -t $(PREFIX)/share/icons/*
 
 $(PREFIX)/bin/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
@@ -57,11 +59,15 @@ $(INSTALL_AUTOSTART) : $(PREFIX)/share/applications/$(PROGRAM).desktop
 .PHONY: uninstall
 uninstall:
 	rm -f $(PREFIX)/bin/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATIONS) $(INSTALL_AUTOSTART)
-	gtk-update-icon-cache $(PREFIX)/share/icons/*
+	update-desktop-database $(PREFIX)/share/applications
+	update-mime-database $(PREFIX)/share/mime
+	gtk-update-icon-cache -f -t $(PREFIX)/share/icons/*
 
 .PHONY: devel
 devel: $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
-	gtk-update-icon-cache $(HOME)/.local/share/icons/*
+	update-desktop-database $(HOME)/.local/share/applications
+	update-mime-database $(HOME)/.local/share/mime
+	gtk-update-icon-cache -f -t $(HOME)/.local/share/icons/*
 
 $(HOME)/.local/bin/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
@@ -83,7 +89,9 @@ $(DEVEL_AUTOSTART) : $(HOME)/.local/share/applications/$(PROGRAM).desktop
 .PHONY: undevel
 undevel:
 	rm -f $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATIONS) $(DEVEL_AUTOSTART)
-	gtk-update-icon-cache $(HOME)/.local/share/icons/*
+	update-desktop-database $(HOME)/.local/share/applications
+	update-mime-database $(HOME)/.local/share/mime
+	gtk-update-icon-cache -f -t $(HOME)/.local/share/icons/*
 
 .PHONY: spellcheck
 spellcheck: README.md share/applications/*.desktop share/man/*/*.1

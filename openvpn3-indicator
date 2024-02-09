@@ -32,7 +32,7 @@ import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import GLib, GObject, Gtk
+from gi.repository import GLib, GObject, Gtk, Gio
 try:
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3 as AppIndicator3
@@ -50,7 +50,6 @@ APPLICATION_ID = 'com.github.grzegorz_gutowski.openvpn3_indicator'
 APPLICATION_URL = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
 APPLICATION_VERSION = '0.1'
 
-#TODO: Handle opens on *.ovpn files
 #TODO: Present session state (change icon on errors, etc.)
 #TODO: Notify user on some of the session state changes
 #TODO: Ask for user confirmation when removing config (and maybe in some other places?)
@@ -239,7 +238,8 @@ class MultiIndicator():
 class Application(Gtk.Application):
     def __init__(self):
         Gtk.Application.__init__(self,
-            application_id=APPLICATION_ID
+            application_id=APPLICATION_ID,
+            flags=Gio.ApplicationFlags.HANDLES_OPEN,
             )
         self.add_main_option('version', ord('V'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show version and exit", None)
         self.add_main_option('verbose', ord('v'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show more info", None)
@@ -248,6 +248,7 @@ class Application(Gtk.Application):
         self.connect('handle-local-options', self.on_local_options)
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
+        self.connect('open', self.on_open)
 
     def on_local_options(self, application, options):
         options = options.end().unpack()
@@ -266,6 +267,12 @@ class Application(Gtk.Application):
 
     def on_activate(self, data):
         logging.info(f'Activate')
+
+    def on_open(self, application, files, n_files, hint):
+        logging.info(f'Open {n_files} {hint}')
+        for file in files:
+            config_path = file.get_path()
+            self.action_config_open(config_path)
 
     def on_startup(self, data):
         logging.info(f'Startup')
@@ -817,44 +824,49 @@ class Application(Gtk.Application):
         if response == Gtk.ResponseType.OK:
             config_path = dialog.get_filename()
             dialog.destroy()
-            #TODO: Deduce default config_name from config content
-            config_name = 'NEW'
-            #TODO: Hide single_use and persistent from interface?
-            config_single_use = False
-            config_persistent = True
-            dialog2 = Gtk.Dialog()
-            dialog2 = Gtk.Dialog(gettext.gettext('OpenVPN Configuration Import'))
-            dialog2.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
-            dialog2.set_icon_name(APPLICATION_NAME)
-            dialog2.set_position(Gtk.WindowPosition.CENTER)
-            content_area = dialog2.get_content_area()
-            content_area.set_property('hexpand', True)
-            content_area.set_property('vexpand', True)
-            grid = Gtk.Grid(row_spacing=10, column_spacing=10, vexpand=True, hexpand=True, margin_top=20, margin_right=20, margin_bottom=20, margin_left=20)
-            grid.attach(Gtk.Label(label=config_path, hexpand=True), 0, 0, 2, 1)
-            label = Gtk.Label(label=gettext.gettext('Configuration Name'), hexpand=True, xalign=0, margin_right=10)
-            grid.attach(label, 0, 1, 1, 1)
-            entry = Gtk.Entry(hexpand=True)
-            entry.set_text(config_name)
-            grid.attach(entry, 1, 1, 1, 1)
-            single_use_button = Gtk.CheckButton(label=gettext.gettext('Single use'), hexpand=True)
-            single_use_button.set_active(config_single_use)
-            grid.attach(single_use_button, 0, 2, 2, 1)
-            persistent_button = Gtk.CheckButton(label=gettext.gettext('Persistent'), hexpand=True)
-            persistent_button.set_active(config_persistent)
-            grid.attach(persistent_button, 0, 3, 2, 1)
-            content_area.add(grid)
-            dialog2.set_keep_above(True)
-            dialog2.show_all()
-            response2 = dialog2.run()
-            if response2 == Gtk.ResponseType.OK:
-                config_name = entry.get_text()
-                config_single_use = single_use_button.get_active()
-                config_persistent = persistent_button.get_active()
-                self.action_config_import_path(None, config_name, config_path, config_single_use, config_persistent)
-            dialog2.destroy()
+
+            self.action_config_open(config_path)
+
         else:
             dialog.destroy()
+
+    def action_config_open(self, config_path):
+        #TODO: Deduce default config_name from config content
+        config_name = 'NEW'
+        #TODO: Hide single_use and persistent from interface?
+        config_single_use = False
+        config_persistent = True
+        dialog2 = Gtk.Dialog()
+        dialog2 = Gtk.Dialog(gettext.gettext('OpenVPN Configuration Import'))
+        dialog2.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+        dialog2.set_icon_name(APPLICATION_NAME)
+        dialog2.set_position(Gtk.WindowPosition.CENTER)
+        content_area = dialog2.get_content_area()
+        content_area.set_property('hexpand', True)
+        content_area.set_property('vexpand', True)
+        grid = Gtk.Grid(row_spacing=10, column_spacing=10, vexpand=True, hexpand=True, margin_top=20, margin_right=20, margin_bottom=20, margin_left=20)
+        grid.attach(Gtk.Label(label=config_path, hexpand=True), 0, 0, 2, 1)
+        label = Gtk.Label(label=gettext.gettext('Configuration Name'), hexpand=True, xalign=0, margin_right=10)
+        grid.attach(label, 0, 1, 1, 1)
+        entry = Gtk.Entry(hexpand=True)
+        entry.set_text(config_name)
+        grid.attach(entry, 1, 1, 1, 1)
+        single_use_button = Gtk.CheckButton(label=gettext.gettext('Single use'), hexpand=True)
+        single_use_button.set_active(config_single_use)
+        grid.attach(single_use_button, 0, 2, 2, 1)
+        persistent_button = Gtk.CheckButton(label=gettext.gettext('Persistent'), hexpand=True)
+        persistent_button.set_active(config_persistent)
+        grid.attach(persistent_button, 0, 3, 2, 1)
+        content_area.add(grid)
+        dialog2.set_keep_above(True)
+        dialog2.show_all()
+        response2 = dialog2.run()
+        if response2 == Gtk.ResponseType.OK:
+            config_name = entry.get_text()
+            config_single_use = single_use_button.get_active()
+            config_persistent = persistent_button.get_active()
+            self.action_config_import_path(None, config_name, config_path, config_single_use, config_persistent)
+        dialog2.destroy()
 
     def action_config_import_path(self, _object, config_name, config_path, config_single_use, config_persistent):
         logging.info(f'Import Config Path')

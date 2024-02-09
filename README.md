@@ -18,6 +18,10 @@ On Ubuntu/Debian systems it should be enough to use the following install comman
 ```sh
 sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 python3-secretstorage
 ```
+On Fedora:
+```sh
+sudo dnf install python3-secretstorage gnome-shell-extension-appindicator
+```
 
 ## Installation instructions
 
