@@ -23,6 +23,10 @@ On Fedora:
 sudo dnf install python3-secretstorage gnome-shell-extension-appindicator
 ```
 
+## Build status
+
+[![Copr build status](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/package/openvpn3-indicator/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/package/openvpn3-indicator/)
+
 ## Installation instructions
 
 You can use provided `Makefile` to install the application in `/usr/local` for all users.

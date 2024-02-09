@@ -73,7 +73,6 @@ BUILDREQUIRES = ' '.join(sorted([
         'desktop-file-utils',
         'make',
         'sed',
-        'python'
     ]))
 REQUIRES  = ' '.join(sorted([
         'openvpn3',
@@ -125,6 +124,8 @@ POSTUN = '\n'.join([
     ])
 
 FILES = '\n'.join([
+        '%license LICENSE',
+        '%doc README.md',
         '%{_bindir}/%{name}',
         '/etc/xdg/autostart/%{name}.desktop'
     ] + [
