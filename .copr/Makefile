@@ -1,12 +1,12 @@
-outdir ?= .
+outdir ?= .copr
 
 .PHONY: srpm
-srpm: openvpn3-indicator.spec
+srpm: .copr/openvpn3-indicator.spec
 	rpkg srpm --outdir $(outdir) --spec $<
 
 .PHONY: clean
 clean:
-	rm -f openvpn3-indicator.spec *.tar.gz *.rpm
+	rm -f .copr/openvpn3-indicator.spec .copr/*.tar.gz .copr/*.rpm
 
-openvpn3-indicator.spec : openvpn3-indicator.spec.py
+.copr/openvpn3-indicator.spec : .copr/openvpn3-indicator.spec.py
 	python3 $< > $@

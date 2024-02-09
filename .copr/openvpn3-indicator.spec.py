@@ -33,17 +33,20 @@ subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', os.getcw
 timestamp_run = subprocess.run(['git', 'log', '-n', '1', '--format=format:%cd', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
 TIMESTAMP = str(timestamp_run.stdout, 'utf-8').strip()
 
-icon_path = pathlib.Path('../share/icons')
+icon_path = pathlib.Path('share/icons')
 ICON_THEMES = [ str(p.relative_to(icon_path)) for p in icon_path.glob('*') if p.is_dir() ]
-ICONS = [ str(p.relative_to(icon_path.parent)) for p in icon_path.glob('**') if p.is_file() ]
+ICONS = [ str(p.relative_to(icon_path.parent)) for p in icon_path.glob('**/*.svg') if p.is_file() ]
 
-mime_path = pathlib.Path('../share/mime')
-MIMES = [ str(p.relative_to(mime_path.parent)) for p in icon_path.glob('**') if p.is_file() ]
+mime_path = pathlib.Path('share/mime')
+MIMES = [ str(p.relative_to(mime_path.parent)) for p in mime_path.glob('**/*.xml') if p.is_file() ]
 
-app_path = pathlib.Path('../share/applications')
-APPS = [ str(p.relative_to(app_path.parent)) for p in icon_path.glob('**') if p.is_file() ]
+app_path = pathlib.Path('share/applications')
+APPS = [ str(p.relative_to(app_path.parent)) for p in app_path.glob('**/*.desktop') if p.is_file() ]
 
-NAME      = 'openvpn3-inidicator'
+man_path = pathlib.Path('share/man')
+MANS = [ str(p.relative_to(man_path.parent)) for p in man_path.glob('**/*.[1-8]') if p.is_file() ]
+
+NAME      = 'openvpn3-indicator'
 VERSION   = f'0.1.{TIMESTAMP}'
 RELEASE   = '1' #'1%{?dist}'
 SUMMARY   = 'Simple GTK indicator GUI for OpenVPN3'
@@ -72,8 +75,8 @@ SOURCES = [
     'README.md',
     'share',
 ]
-SOURCECODE = f'openvpn3-indicator-{VERSION}.tar.gz'
-source_run = subprocess.run(['tar', '--create', '--file', SOURCECODE, '--directory', '..'] + SOURCES)
+SOURCECODE = f'.copr/openvpn3-indicator-{VERSION}.tar.gz'
+source_run = subprocess.run(['tar', '--create', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|'] + SOURCES)
 
 PREP = '\n'.join([
         '%setup'
@@ -84,7 +87,7 @@ BUILD = '\n'.join([
     ])
 
 INSTALL = '\n'.join([
-        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} install',
+        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} package',
     ])
 
 POST = '\n'.join([
@@ -105,6 +108,15 @@ POSTUN = '\n'.join([
         'touch --no-create %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
     ] + [
         'gtk-update-icon-cache --silent %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
+    ])
+
+FILES = '\n'.join([
+        '%{_bindir}/%{name}',
+        '/etc/xdg/autostart/%{name}.desktop'
+    ] + [
+        '%{_datadir}/'+path for path in APPS + ICONS + MIMES
+    ] + [
+        '%{_datadir}/'+path+'.gz' for path in MANS
     ])
 
 
@@ -150,6 +162,10 @@ Source: {SOURCECODE}
 %postun
 
 {POSTUN}
+
+%files
+
+{FILES}
 
 %changelog
 
