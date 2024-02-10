@@ -26,7 +26,7 @@ import pathlib
 import re
 import subprocess
 
-parser = argparse.ArgumentParser(description='KOLEJKA foreman')
+parser = argparse.ArgumentParser()
 parser.add_argument('--scriptdir', default=os.getcwd())
 parser.add_argument('--outdir', default=os.getcwd())
 args = parser.parse_args()
@@ -89,7 +89,7 @@ SOURCES = [
     'share',
 ]
 SOURCECODE = outdir / f'openvpn3-indicator-{VERSION}.tar.gz'
-source_run = subprocess.run(['tar', '--create', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|', '--directory', str(gitdir) ] + SOURCES)
+source_run = subprocess.run(['tar', '--create', '--auto-compress', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|', '--directory', str(gitdir) ] + SOURCES)
 
 PREP = '\n'.join([
         '%setup'
@@ -97,6 +97,8 @@ PREP = '\n'.join([
 
 BUILD = '\n'.join([
         'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} all',
+    ] + [
+        'desktop-file-validate %(buildroot}%{_datadir}'+path for path in APPS
     ])
 
 INSTALL = '\n'.join([
@@ -114,6 +116,10 @@ POSTTRANS = '\n'.join([
         'update-mime-database %{_datadir}/mime || :',
     ] + [
         'gtk-update-icon-cache --silent %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
+    ])
+
+PREUN = '\n'.join([
+        'xdg-mime uninstall --mode system %{_datadir}/'+mime for mime in MIMES
     ])
 
 POSTUN = '\n'.join([
@@ -175,6 +181,10 @@ Source: {SOURCECODE}
 %posttrans
 
 {POSTTRANS}
+
+%preun
+
+{PREUN}
 
 %postun
 
