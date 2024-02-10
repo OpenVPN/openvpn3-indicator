@@ -75,7 +75,7 @@ BUILDREQUIRES = ' '.join(sorted([
         'sed',
     ]))
 REQUIRES  = ' '.join(sorted([
-        'openvpn3',
+        'openvpn3-client',
         'python3-dbus',
         'python3-secretstorage',
         'gnome-shell-extension-appindicator',
@@ -105,6 +105,8 @@ INSTALL = '\n'.join([
 
 POST = '\n'.join([
         'touch --no-create %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
+    ] + [
+        'xdg-mime install --mode system %{_datadir}/'+mime for mime in MIMES
     ])
 
 POSTTRANS = '\n'.join([
