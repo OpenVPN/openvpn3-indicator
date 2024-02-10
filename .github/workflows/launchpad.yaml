@@ -1,0 +1,20 @@
+on:
+  push:
+    branches:
+    - main
+jobs:
+  launchpad:
+    name: Deploy to Launchpad
+    runs-on: ubuntu:latest
+    steps:
+    - name: Prepare
+      run: |
+        apt-get -f -y install make devscripts dput dpkg-dev
+    - name: Install GPG Key
+      env:
+        KEY: {{ secrets.GPG_LAUNCHPAD_KEY }}
+      run: |
+        echo $KEY | gpg --import
+    - name: Deploy
+      run: |
+        make -C .launchpad
