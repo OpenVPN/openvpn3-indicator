@@ -84,7 +84,7 @@ It should be considered as a temporary work-around until Network Manager impleme
             f'debhelper (>= {COMPAT})',
         ]
     REQUIRES  = [
-            'openvpn3-client',
+            'openvpn3',
             'python3-dbus',
             'python3-secretstorage',
             'python3-gi',
