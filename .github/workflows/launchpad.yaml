@@ -12,7 +12,7 @@ jobs:
         apt-get -f -y install make devscripts dput dpkg-dev
     - name: Install GPG Key
       env:
-        KEY: {{ secrets.GPG_LAUNCHPAD_KEY }}
+        KEY: ${{ secrets.GPG_LAUNCHPAD_KEY }}
       run: |
         echo $KEY | gpg --import
     - name: Deploy
