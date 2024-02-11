@@ -97,12 +97,12 @@ PREP = '\n'.join([
 
 BUILD = '\n'.join([
         'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} all',
-    ] + [
-        'desktop-file-validate %{buildroot}%{_datadir}'+path for path in APPS
     ])
 
 INSTALL = '\n'.join([
         'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} package',
+    ] + [
+        'desktop-file-validate %{buildroot}%{_datadir}/'+path for path in APPS
     ])
 
 POST = '\n'.join([

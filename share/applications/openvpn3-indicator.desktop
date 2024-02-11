@@ -5,6 +5,6 @@ Comment=Simple GTK indicator GUI for OpenVPN3
 Exec=/usr/bin/openvpn3-indicator
 Terminal=false
 Type=Application
-Categories=Utility;TrayIcon;
+Categories=Utility;Network;
 StartupNotify=false
 MimeType=text/openvpn-config;

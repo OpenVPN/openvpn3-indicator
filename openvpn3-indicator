@@ -57,7 +57,8 @@ APPLICATION_VERSION = '0.1'
 #TODO: Understand better the possible session state changes
 #TODO: Implement other than AppIndicator ways to have system tray icon
 #TODO: Divide the script into smaller, more managable components
-#TODO: Prepare packaging for Debian/Ubuntu/Fedora (Github + Launchpad / Copr)
+#TODO: /usr/share/metainfo ?
+#TODO: Understand mimetype icons inheritance
 
 DEFAULT_CONFIG_NAME = gettext.gettext('UNKNOWN')
 DEFAULT_SESSION_NAME = gettext.gettext('UNKNOWN')
