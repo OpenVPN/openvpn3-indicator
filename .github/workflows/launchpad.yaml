@@ -15,7 +15,7 @@ jobs:
       env:
         KEY: ${{ secrets.GPG_LAUNCHPAD_KEY }}
       run: |
-        echo $KEY | gpg --import
+        echo "${KEY}" | gpg --import
     - name: Deploy
       run: |
         make -C .launchpad
