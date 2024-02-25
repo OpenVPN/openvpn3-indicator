@@ -67,7 +67,7 @@ It is based on D-Bus interface provided by OpenVPN3 Linux client and does not re
 It should be considered as a temporary work-around until Network Manager implements support for OpenVPN 3, or OpenVPN provides a graphical interface for Linux users.
 '''
 LICENSE   = 'AGPL-3.0'
-URL       = 'https://github.com/grzegorz-gutowski/openvpn3-indicator'
+URL       = 'https://github.com/OpenVPN/openvpn3-indicator'
 BUILDARCH = 'noarch'
 BUILDREQUIRES = ' '.join(sorted([
         'desktop-file-utils',

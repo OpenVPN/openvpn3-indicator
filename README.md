@@ -1,4 +1,4 @@
-# ![logo](https://raw.githubusercontent.com/grzegorz-gutowski/openvpn3-indicator/main/share/icons/hicolor/scalable/apps/openvpn3-indicator.svg) openvpn3-indicator
+# ![logo](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/share/icons/hicolor/scalable/apps/openvpn3-indicator.svg) openvpn3-indicator
 
 Simple GTK indicator GUI for OpenVPN3.
 

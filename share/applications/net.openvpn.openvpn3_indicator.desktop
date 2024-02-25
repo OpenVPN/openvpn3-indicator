@@ -6,5 +6,6 @@ Exec=/usr/bin/openvpn3-indicator
 Terminal=false
 Type=Application
 Categories=Utility;Network;
-StartupNotify=false
 MimeType=text/openvpn-config;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
