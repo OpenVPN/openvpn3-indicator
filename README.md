@@ -13,21 +13,45 @@ It should be considered as a temporary work-around until Network Manager impleme
 This application requires the installation of `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
 There are [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
 
-It also requires some standard python libraries that are usually present in desktop installations.
+## Installation instructions
+
+Package `openvpn3-indicator` can be installed on popular Linux distributions using the provided repositories.
+
+### Ubuntu
+
+Packages are hosted in [Ubuntu Launchpad repository](https://launchpad.net/~grzegorz-gutowski/+archive/ubuntu/openvpn3-indicator) .
+Installation instructions:
+
+```sh
+sudo add-apt-repository ppa:grzegorz-gutowski/openvpn3-indicator
+sudo apt install openvpn3-indicator
+```
+
+### Fedora + RHEL
+
+Packages are hosted in [Fedora Copr repository](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/) .
+Installation instructions:
+
+```
+sudo dnf copr enable grzegorz-gutowski/openvpn3-indicator
+sudo dnf install openvpn3-indicator
+```
+
+## Installation instructions (for developers)
+
+### Prerequisites
+
+Application requires some standard python libraries that are usually present in desktop installations.
 On Ubuntu/Debian systems it should be enough to use the following install command:
 ```sh
-sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 python3-secretstorage
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 python3-secretstorage python3-setproctitle
 ```
 On Fedora:
 ```sh
-sudo dnf install python3-secretstorage gnome-shell-extension-appindicator
+sudo dnf install python3-secretstorage python3-setproctitle gnome-shell-extension-appindicator
 ```
 
-## Build status
-
-[![Copr build status](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/package/openvpn3-indicator/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/package/openvpn3-indicator/)
-
-## Installation instructions
+### Installation
 
 You can use provided `Makefile` to install the application in `/usr/local` for all users.
 
