@@ -86,8 +86,9 @@ It should be considered as a temporary work-around until Network Manager impleme
     REQUIRES  = [
             'openvpn3',
             'python3-dbus',
-            'python3-secretstorage',
             'python3-gi',
+            'python3-secretstorage',
+            'python3-setproctitle',
             'gir1.2-ayatanaappindicator3-0.1',
         ]
 

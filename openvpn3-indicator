@@ -36,7 +36,7 @@ from gi.repository import GLib, GObject, Gtk, Gio
 try:
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-except:
+except (ValueError, ImportError):
     gi.require_version('AppIndicator3', '0.1')
     from gi.repository import AppIndicator3
 import secretstorage
@@ -237,6 +237,199 @@ class MultiIndicator():
 
 ###
 #
+# MultiNotifier
+#
+###
+
+class MultiNotifier():
+    @property
+    def identifier(self):
+        return self._identifier
+    def sub_identifier(self, identifier):
+        return f'{self.identifier}-{identifier}'
+    @property
+    def  application(self):
+        return self._application
+
+    def __init__(self, application, identifier):
+        self._identifier = identifier
+        self._application = application
+        self._notifiers = dict()
+        self._pending = list()
+        self.default_icon = f'{APPLICATION_NAME}'
+        self.default_title = f'{APPLICATION_DESCRIPTION}'
+        self.default_body = None
+        self.default_category = None
+        self.default_priority = Gio.NotificationPriority.NORMAL
+        self.default_timespan = None
+        self.invalid = False
+
+    def invalidate(self):
+        self.invalid = True
+
+    class Notifier():
+        @property
+        def parent(self):
+            return self._parent
+        @property
+        def identifier(self):
+            return self._identifier
+        @property
+        def sent(self):
+            return self._sent
+        @property
+        def timeout(self):
+            return self._timeout
+
+        def __init__(self, parent, identifier, active=False, icon=None, title=None, body=None, category=None, priority=None, timespan=None):
+            self._parent = parent
+            self._identifier = identifier
+            self._active = active
+            self._icon = icon or self.parent.default_icon
+            self._title = title or self.parent.default_title
+            self._body = body or self.parent.default_body
+            self._category = category or self.parent.default_category
+            self._priority = priority or self.parent.default_priority
+            self._timespan = timespan or self.parent.default_timespan
+            self._sent = None
+            self._timeout = None
+
+        def close(self):
+            if self.parent:
+                self.parent.del_notifier(self)
+        @property
+        def active(self):
+            return self._active
+        @active.setter
+        def active(self, active):
+            active = bool(active)
+            if self._active != active:
+                self._active = active
+                if not self._active:
+                    if self._sent and self.parent:
+                        self.parent.application.withdraw_notification(self.identifier)
+                    self._sent = None
+                    self._timeout = None
+                if self.parent:
+                    self.parent.invalidate()
+        @property
+        def icon(self):
+            return self._icon
+        @icon.setter
+        def icon(self, icon):
+            icon = str(icon)
+            if self._icon != icon:
+                self._icon = icon
+                if self.parent and self.active:
+                    self.parent.invalidate()
+        @property
+        def title(self):
+            return self._title
+        @title.setter
+        def title(self, title):
+            title = str(title)
+            if self._title != title:
+                self._title = title
+                if self.parent and self.active:
+                    self.parent.invalidate()
+        @property
+        def body(self):
+            return self._body
+        @body.setter
+        def body(self, body):
+            body = str(body)
+            if self._body != body:
+                self._body = body
+                if self.parent and self.active:
+                    self.parent.invalidate()
+        @property
+        def category(self):
+            return self._category
+        @category.setter
+        def category(self, category):
+            category = str(category)
+            if self._category != category:
+                self._category = category
+                if self.parent and self.active:
+                    self.parent.invalidate()
+        @property
+        def priority(self):
+            return self._priority
+        @priority.setter
+        def priority(self, priority):
+            if self._priority != priority:
+                self._priority = priority
+                if self.parent and self.active:
+                    self.parent.invalidate()
+        @property
+        def timespan(self):
+            return self._timespan
+        @timespan.setter
+        def timespan(self, timespan):
+            if self._timespan != timespan:
+                self._timespan = timespan
+                if self.parent and self.active:
+                    self.parent.invalidate()
+
+    def new_notifier(self, identifier=None, **kwargs):
+        identifier = self.sub_identifier(identifier or str(uuid.uuid4()))
+        notifier = self.Notifier(self, identifier=identifier, **kwargs)
+        self._notifiers[identifier] = notifier
+        logging.debug(f'Created Notifier {identifier}')
+        if notifier.active:
+            self.invalidate()
+        return notifier
+    def del_notifier(self, notifier):
+        if notifier.parent == self:
+            if notifier.identifier in self._notifiers:
+                if notifier.active:
+                    self._pending.append(notifier)
+                del self._notifiers[notifier.identifier]
+                logging.debug(f'Destroyed Notifier {notifier.identifier}')
+            notifier._parent = None
+
+    def commit_notifier(self, notifier):
+        if notifier.timeout is not None and notifier.timeout < time.monotonic():
+            notifier.active = False
+        if notifier.active and notifier.sent is None:
+            notifier._sent = time.monotonic()
+            notifier._timeout = notifier.timespan and notifier.sent + notifier.timespan
+
+            target = Gio.Notification.new(notifier.title or '')
+            if notifier.icon is not None:
+                icon = Gio.Icon.new_for_string(notifier.icon)
+                target.set_icon(icon)
+            if notifier.title is not None:
+                target.set_title(notifier.title)
+            if notifier.body is not None:
+                target.set_body(notifier.body)
+            if notifier.category is not None:
+                target.set_category(notifier.category)
+            if notifier.priority is not None:
+                target.set_priority(notifier.priority)
+            self.application.send_notification(notifier.identifier, target)
+        if not notifier.active and notifier.sent is not None:
+            notifier._sent = None
+            notifier._timeout = None
+            self.application.withdraw_notification(notifier.identifier)
+
+    def update(self):
+        for notifier in self._notifiers.values():
+            self.commit_notifier(notifier)
+        new_pending = list()
+        for notifier in self._pending:
+            self.commit_notifier(notifier)
+            if notifier.active:
+                new_pending.append(notifier)
+        self._pending = new_pending
+        self.invalid = False
+
+    def close(self):
+        for notifier in list(self._notifiers.values()):
+            notifier.close()
+
+###
+#
 # Application
 #
 ###
@@ -313,6 +506,9 @@ class Application(Gtk.Application):
         self.default_indicator.order_key='0'
         self.default_indicator.active=True
         self.indicators = dict()
+        
+        self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
+        self.notifiers = dict()
 
         self.last_invalid = time.monotonic()
         self.invalid_sessions = True
@@ -320,6 +516,15 @@ class Application(Gtk.Application):
 
         GLib.timeout_add(1000, self.on_schedule)
         self.hold()
+
+        self.multi_notifier.new_notifier(
+            identifier = 'startup',
+            title = f'{APPLICATION_DESCRIPTION}',
+            body = 'Started',
+            icon = f'{APPLICATION_NAME}',
+            active = True,
+            timespan = 2,
+        )
 
     def refresh_ui(self):
         if self.invalid_ui:
@@ -335,9 +540,23 @@ class Application(Gtk.Application):
                     indicator.order_key = f'1-{session_name}-{session_id}'
                     indicator.active = True
                 new_indicators[session_id] = indicator
+            new_notifiers = dict()
+            for session_id in self.sessions:
+                notifier = self.notifiers.get(session_id, None)
+                if notifier is None:
+                    session_name = self.get_session_name(session_id)
+                    notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status')
+                    notifier.icon = '{APPLICATION_NAME}-active'
+                    notifier.title = f'{APPLICATION_DESCRIPTION}: {session_name}'
+                    notifier.title = session_name
+                    notifier.active = False
+                new_notifiers[session_id] = notifier
             for session_id, indicator in self.indicators.items():
                 if session_id not in new_indicators:
                     indicator.close()
+            for session_id, notifier in self.notifiers.items():
+                if session_id not in new_notifiers:
+                    notifier.close()
             if len(new_indicators) == 0:
                 self.default_indicator.active = True
                 #TODO: Change icon, description, etc. Based on what?
@@ -350,6 +569,7 @@ class Application(Gtk.Application):
                     #TODO: Change icon, description, etc. based on status
                     indicator.menu = self.construct_session_menu(session_id)
             self.multi_indicator.update()
+            self.notifiers = new_notifiers
             self.invalid_ui = False
 
     def refresh_sessions(self):
@@ -522,6 +742,62 @@ class Application(Gtk.Application):
         menu.show_all()
         return menu
 
+    def session_icon(self, session_id):
+        status = self.session_statuses[session_id]
+        major = status['major']
+        minor = status['minor']
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
+            return f'{APPLICATION_NAME}-configuring'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
+            return f'{APPLICATION_NAME}-configuring'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
+            return f'{APPLICATION_NAME}-active-error'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
+            return f'{APPLICATION_NAME}-idle-error'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
+            return f'{APPLICATION_NAME}-idle-error'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
+            return f'{APPLICATION_NAME}-idle'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
+            return f'{APPLICATION_NAME}-idle'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
+            return f'{APPLICATION_NAME}-configuring'
+        return f'{APPLICATION_NAME}-active'
+
+    def session_description(self, session_id):
+        status = self.session_statuses[session_id]
+        major = status['major']
+        minor = status['minor']
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
+            return f'Configuration OK'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
+            return f'Authentication required'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
+            return f'Stopped'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
+            return f'Authentication failed'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
+            return f'Connection failed'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
+            return f'Disconnected'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
+            return f'Done'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
+            return f'Authentication required'
+        return f'Connected'
+
+    def notify_session_change(self, session_id):
+        indicator = self.indicators.get(session_id, None)
+        if indicator:
+            indicator.icon = self.session_icon(session_id)
+        notifier = self.notifiers.get(session_id, None)
+        if notifier:
+            notifier.active = False
+            notifier.icon = self.session_icon(session_id)
+            notifier.body = self.session_description(session_id)
+            notifier.timespan = 3
+            notifier.active = True
+
     def on_session_manager_event(self, event):
         logging.info(f'Session Manager Event {event}')
         event_type = event.GetType()
@@ -581,6 +857,7 @@ class Application(Gtk.Application):
                 self.action_session_disconnect(None, session_id)
 
             self.action_get_credentials(None, session_id, required_credentials)#, force_ui=True)
+        self.notify_session_change(session_id)
 
     def action_auth_url(self, _object, session_id, url):
         webbrowser.open_new(url)
@@ -740,6 +1017,7 @@ class Application(Gtk.Application):
             self.refresh_sessions()
         if self.invalid_ui:
             self.refresh_ui()
+        self.multi_notifier.update()
         GLib.timeout_add(1000, self.on_schedule)
 
     def action_config_connect(self, _object, config_id):
@@ -900,5 +1178,11 @@ class Application(Gtk.Application):
 ###
 
 if __name__ == '__main__':
+    try:
+        import setproctitle
+        setproctitle.setproctitle(f'{APPLICATION_NAME}')
+    except ImportError:
+        pass
     app = Application()
     app.run(sys.argv)
+

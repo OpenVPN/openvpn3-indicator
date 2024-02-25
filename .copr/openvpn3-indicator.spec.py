@@ -78,6 +78,7 @@ REQUIRES  = ' '.join(sorted([
         'openvpn3-client',
         'python3-dbus',
         'python3-secretstorage',
+        'python3-setproctitle',
         'gnome-shell-extension-appindicator',
     ]))
 
