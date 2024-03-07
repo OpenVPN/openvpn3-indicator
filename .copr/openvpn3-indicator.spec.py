@@ -84,7 +84,7 @@ REQUIRES  = ' '.join(sorted([
 
 SOURCES = [
     'src',
-    'scripts'
+    'scripts',
     'Makefile',
     'LICENSE',
     'README.md',

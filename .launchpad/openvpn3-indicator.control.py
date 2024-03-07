@@ -81,6 +81,7 @@ It should be considered as a temporary work-around until Network Manager impleme
             'desktop-file-utils',
             'make',
             'sed',
+            'python3',
             f'debhelper (>= {COMPAT})',
         ]
     REQUIRES  = [
