@@ -93,7 +93,8 @@ It should be considered as a temporary work-around until Network Manager impleme
         ]
 
     SOURCES = [
-        'openvpn3-indicator',
+        'src',
+        'scripts',
         'Makefile',
         'LICENSE',
         'README.md',

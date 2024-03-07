@@ -1,16 +1,32 @@
 PROGRAM := openvpn3-indicator
+DESTDIR ?=
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share
 AUTOSTART ?= /etc/xdg/autostart
 VERSION ?= $(shell git log -n 1 --format=format:devel-%cd-%h  --date=format-local:%Y%m%d%H%M%S)
+PREPAREDIR ?= build/prepare
 
+DESTDIR := $(DESTDIR:/=)
+PREFIX := $(PREFIX:/=)
+BINDIR := $(BINDIR:/=)
+DATADIR := $(DATADIR:/=)
+AUTOSTART := $(AUTOSTART:/=)
+PREPAREDIR := $(PREPAREDIR:/=)
+
+SOURCES := $(shell find src -iname tests -prune -o -iname __pycache__ -prune -o -iname about.py -o -type f -print)
+ABOUT := $(shell find src -type f -iname about.py)
 SHARES := $(shell find share -type f -not -iname "*.[1-8]" -not -iname "*.desktop" -not -iname "*.bak" -not -iname "*.swp")
 SHARES := $(patsubst share/%,%,$(SHARES))
 MANS := $(shell find share -type f -iname "*.[1-8]")
 MANS := $(patsubst share/%,%,$(MANS))
 APPLICATION := $(shell find share -type f -iname "*.desktop")
 APPLICATION := $(patsubst share/%,%,$(APPLICATION))
+
+PREPARE_SOURCES := $(patsubst src/%,$(PREPAREDIR)/%,$(SOURCES))
+PREPARE_ABOUT := $(patsubst src/%,$(PREPAREDIR)/%,$(ABOUT))
+
+INSTALL_SHARES := $(patsubst %,$(DESTDIR)$(DATADIR)/%,$(SHARES))
 
 INSTALL_SHARES := $(patsubst %,$(DESTDIR)$(DATADIR)/%,$(SHARES))
 INSTALL_MANS := $(patsubst %,$(DESTDIR)$(DATADIR)/%.gz,$(MANS))
@@ -37,7 +53,20 @@ default:
 	@echo
 
 .PHONY: all
-all:
+all: $(PROGRAM)
+
+
+$(PROGRAM): $(PREPARE_SOURCES) $(PREPARE_ABOUT) Makefile scripts/build_executable
+	scripts/build_executable --directory $(PREPAREDIR) --executable $@
+
+$(PREPARE_SOURCES): $(PREPAREDIR)/% : src/%
+	@install --directory $(dir $@)
+	install --mode 0644 $< $@
+
+$(PREPARE_ABOUT): $(PREPAREDIR)/% : src/%
+	@install --directory $(dir $@)
+	install --mode 0644 $< $@
+	sed -E -e "s|^( *APPLICATION_VERSION *= *)'[^']*'$$|\1'$(VERSION)'|" -i $@
 
 .PHONY: package
 package: $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
@@ -52,7 +81,6 @@ install: package
 $(DESTDIR)$(BINDIR)/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
 	install --mode 0755 $< $@
-	sed -E -e "s|^APPLICATION_VERSION = '[^']*'$$|APPLICATION_VERSION = '$(VERSION)'|" -i $@
 
 $(INSTALL_SHARES): $(DESTDIR)$(DATADIR)/% : share/%
 	@install --directory $(dir $@)
@@ -65,7 +93,7 @@ $(INSTALL_MANS): $(DESTDIR)$(DATADIR)/%.gz : share/%
 
 $(INSTALL_APPLICATION): share/$(APPLICATION)
 	@install --directory $(dir $@)
-	sed -E -e "s|/usr/bin|$(BINDIR)/|g" $< > $@
+	sed -E -e "s|/usr/bin/|$(BINDIR)/|g" $< > $@
 	@chmod 0644 $@
 
 $(INSTALL_AUTOSTART) : $(INSTALL_APPLICATION)
@@ -85,7 +113,7 @@ devel: $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATION) $(DEVE
 	update-mime-database $(HOME)/.local/share/mime
 	gtk-update-icon-cache -f -t $(HOME)/.local/share/icons/*
 
-$(HOME)/.local/bin/$(PROGRAM) : $(PROGRAM)
+$(HOME)/.local/bin/$(PROGRAM) : src/__main__.py
 	@install --directory $(dir $@)
 	ln --force --symbolic $(abspath $<) $@
 

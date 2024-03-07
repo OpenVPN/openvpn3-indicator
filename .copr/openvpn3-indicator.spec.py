@@ -83,7 +83,8 @@ REQUIRES  = ' '.join(sorted([
     ]))
 
 SOURCES = [
-    'openvpn3-indicator',
+    'src',
+    'scripts'
     'Makefile',
     'LICENSE',
     'README.md',

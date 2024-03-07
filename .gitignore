@@ -1,5 +1,8 @@
 *.bak
 *.swp
+__pycache__
 /.copr/*.spec
 /.copr/*.tar.gz
 /.copr/*.rpm
+/build
+/openvpn3-indicator

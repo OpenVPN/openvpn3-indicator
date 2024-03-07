@@ -39,16 +39,14 @@ try:
 except (ValueError, ImportError):
     gi.require_version('AppIndicator3', '0.1')
     from gi.repository import AppIndicator3
-import secretstorage
 import webbrowser
 
 import openvpn3
 
-APPLICATION_NAME = 'openvpn3-indicator'
-APPLICATION_DESCRIPTION = 'OpenVPN3 Indicator'
-APPLICATION_ID = 'net.openvpn.openvpn3_indicator'
-APPLICATION_URL = 'https://github.com/OpenVPN/openvpn3-indicator'
-APPLICATION_VERSION = '0.1'
+from openvpn3_indicator.about import *
+from openvpn3_indicator.multi_indicator import MultiIndicator
+from openvpn3_indicator.multi_notifier import MultiNotifier
+from openvpn3_indicator.credential_store import CredentialStore
 
 #TODO: Present session state (change icon on errors, etc.)
 #TODO: Notify user on some of the session state changes
@@ -56,377 +54,12 @@ APPLICATION_VERSION = '0.1'
 #TODO: Collect and present session logs and stats
 #TODO: Understand better the possible session state changes
 #TODO: Implement other than AppIndicator ways to have system tray icon
-#TODO: Divide the script into smaller, more managable components
 #TODO: /usr/share/metainfo ?
 #TODO: Understand mimetype icons inheritance
 #TODO: Prepare localization
 
 DEFAULT_CONFIG_NAME = gettext.gettext('UNKNOWN')
 DEFAULT_SESSION_NAME = gettext.gettext('UNKNOWN')
-
-###
-#
-# MultiIndicator
-#
-###
-
-class MultiIndicator():
-    @property
-    def identifier(self):
-        return self._identifier
-
-    def sub_identifier(self, num):
-        if num == 0:
-            return f'{self.identifier}'
-        return f'{self.identifier}-{num}'
-
-    def sub_indicator(self, num):
-        while len(self._sub_indicators) <= num:
-            sub = AppIndicator3.Indicator.new(
-                self.sub_identifier(len(self._sub_indicators)),
-                self.default_icon,
-                self.default_category
-                )
-            sub.set_ordering_index(num)
-            self._sub_indicators.append(sub)
-
-        return self._sub_indicators[num]
-
-    def __init__(self, identifier):
-        self._identifier = identifier
-        self._sub_indicators = list()
-        self._indicators = dict()
-        self.default_icon = f'{APPLICATION_NAME}'
-        self.default_description = f'{APPLICATION_DESCRIPTION}'
-        self.default_title = f'{APPLICATION_DESCRIPTION}'
-        self.default_category = AppIndicator3.IndicatorCategory.SYSTEM_SERVICES
-        self.invalid = False
-
-    def invalidate(self):
-        self.invalid = True
-
-    class Indicator():
-        @property
-        def parent(self):
-            return self._parent
-        @property
-        def identifier(self):
-            return self._identifier
-
-        def __init__(self, parent, identifier, active=False, icon=None, description=None, title=None, order_key=None, menu=None):
-            self._parent = parent
-            self._identifier = identifier
-            self._active = active
-            self._icon = icon or self.parent.default_icon
-            self._description = description or self.parent.default_description
-            self._title = title or self.parent.default_title
-            self._order_key = order_key or self.identifier
-            self._menu = menu
-        def close(self):
-            if self.parent:
-                self.parent.del_indicator(self)
-        @property
-        def active(self):
-            return self._active
-        @active.setter
-        def active(self, active):
-            active = bool(active)
-            if self._active != active:
-                self._active = active
-                if self.parent:
-                    self.parent.invalidate()
-        @property
-        def icon(self):
-            return self._icon
-        @icon.setter
-        def icon(self, icon):
-            icon = str(icon)
-            if self._icon != icon:
-                self._icon = icon
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def description(self):
-            return self._description
-        @description.setter
-        def description(self, description):
-            description = str(description)
-            if self._description != description:
-                self._description = description
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def title(self):
-            return self._title
-        @title.setter
-        def title(self, title):
-            title = str(title)
-            if self._title != title:
-                self._title = title
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def order_key(self):
-            return self._order_key
-        @order_key.setter
-        def order_key(self, order_key):
-            order_key = str(order_key)
-            if self._order_key != order_key:
-                self._order_key = order_key
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def menu(self):
-            return self._menu
-        @menu.setter
-        def menu(self, menu):
-            if self._menu != menu:
-                self._menu = menu
-                if self.parent and self.active:
-                    self.parent.invalidate()
-
-    def new_indicator(self, **kwargs):
-        identifier = str(uuid.uuid4())
-        indicator = self.Indicator(self, identifier, **kwargs)
-        self._indicators[identifier] = indicator
-        logging.debug(f'Created Indicator {identifier}')
-        if indicator.active:
-            self.invalidate()
-        return indicator
-    def del_indicator(self, indicator):
-        if indicator.parent == self:
-            if indicator.identifier in self._indicators:
-                del self._indicators[indicator.identifier]
-                if indicator.active:
-                    self.invalidate()
-                logging.debug(f'Destroyed Indicator {indicator.identifier}')
-            indicator._parent = None
-
-    def commit_indicator(self, indicator, num):
-        target = self.sub_indicator(num)
-        target.set_icon_full(indicator.icon, indicator.description)
-        target.set_title(indicator.title)
-        if indicator.menu:
-            target.set_menu(indicator.menu)
-        else:
-            target.set_menu(Gtk.Menu())
-        target.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-
-    def hide_indicator(self, num):
-        target = self.sub_indicator(num)
-        target.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
-
-    def update(self):
-        if self.invalid:
-            logging.debug('Repairing Indicators')
-            indicators = list()
-            for indicator in self._indicators.values():
-                if indicator.active:
-                    indicators.append(indicator)
-            num = 0
-            for indicator in sorted(indicators, key=lambda i : i.order_key):
-                self.commit_indicator(indicator, num)
-                num += 1
-            for other in range(num, len(self._sub_indicators)):
-                self.hide_indicator(other)
-            self.invalid=False
-
-    def close(self):
-        for indicator in list(self._indicators.values()):
-            indicator.close()
-
-###
-#
-# MultiNotifier
-#
-###
-
-class MultiNotifier():
-    @property
-    def identifier(self):
-        return self._identifier
-    def sub_identifier(self, identifier):
-        return f'{self.identifier}-{identifier}'
-    @property
-    def  application(self):
-        return self._application
-
-    def __init__(self, application, identifier):
-        self._identifier = identifier
-        self._application = application
-        self._notifiers = dict()
-        self._pending = list()
-        self.default_icon = f'{APPLICATION_NAME}'
-        self.default_title = f'{APPLICATION_DESCRIPTION}'
-        self.default_body = None
-        self.default_category = None
-        self.default_priority = Gio.NotificationPriority.NORMAL
-        self.default_timespan = None
-        self.invalid = False
-
-    def invalidate(self):
-        self.invalid = True
-
-    class Notifier():
-        @property
-        def parent(self):
-            return self._parent
-        @property
-        def identifier(self):
-            return self._identifier
-        @property
-        def sent(self):
-            return self._sent
-        @property
-        def timeout(self):
-            return self._timeout
-
-        def __init__(self, parent, identifier, active=False, icon=None, title=None, body=None, category=None, priority=None, timespan=None):
-            self._parent = parent
-            self._identifier = identifier
-            self._active = active
-            self._icon = icon or self.parent.default_icon
-            self._title = title or self.parent.default_title
-            self._body = body or self.parent.default_body
-            self._category = category or self.parent.default_category
-            self._priority = priority or self.parent.default_priority
-            self._timespan = timespan or self.parent.default_timespan
-            self._sent = None
-            self._timeout = None
-
-        def close(self):
-            if self.parent:
-                self.parent.del_notifier(self)
-        @property
-        def active(self):
-            return self._active
-        @active.setter
-        def active(self, active):
-            active = bool(active)
-            if self._active != active:
-                self._active = active
-                if not self._active:
-                    if self._sent and self.parent:
-                        self.parent.application.withdraw_notification(self.identifier)
-                    self._sent = None
-                    self._timeout = None
-                if self.parent:
-                    self.parent.invalidate()
-        @property
-        def icon(self):
-            return self._icon
-        @icon.setter
-        def icon(self, icon):
-            icon = str(icon)
-            if self._icon != icon:
-                self._icon = icon
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def title(self):
-            return self._title
-        @title.setter
-        def title(self, title):
-            title = str(title)
-            if self._title != title:
-                self._title = title
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def body(self):
-            return self._body
-        @body.setter
-        def body(self, body):
-            body = str(body)
-            if self._body != body:
-                self._body = body
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def category(self):
-            return self._category
-        @category.setter
-        def category(self, category):
-            category = str(category)
-            if self._category != category:
-                self._category = category
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def priority(self):
-            return self._priority
-        @priority.setter
-        def priority(self, priority):
-            if self._priority != priority:
-                self._priority = priority
-                if self.parent and self.active:
-                    self.parent.invalidate()
-        @property
-        def timespan(self):
-            return self._timespan
-        @timespan.setter
-        def timespan(self, timespan):
-            if self._timespan != timespan:
-                self._timespan = timespan
-                if self.parent and self.active:
-                    self.parent.invalidate()
-
-    def new_notifier(self, identifier=None, **kwargs):
-        identifier = self.sub_identifier(identifier or str(uuid.uuid4()))
-        notifier = self.Notifier(self, identifier=identifier, **kwargs)
-        self._notifiers[identifier] = notifier
-        logging.debug(f'Created Notifier {identifier}')
-        if notifier.active:
-            self.invalidate()
-        return notifier
-    def del_notifier(self, notifier):
-        if notifier.parent == self:
-            if notifier.identifier in self._notifiers:
-                if notifier.active:
-                    self._pending.append(notifier)
-                del self._notifiers[notifier.identifier]
-                logging.debug(f'Destroyed Notifier {notifier.identifier}')
-            notifier._parent = None
-
-    def commit_notifier(self, notifier):
-        if notifier.timeout is not None and notifier.timeout < time.monotonic():
-            notifier.active = False
-        if notifier.active and notifier.sent is None:
-            notifier._sent = time.monotonic()
-            notifier._timeout = notifier.timespan and notifier.sent + notifier.timespan
-
-            target = Gio.Notification.new(notifier.title or '')
-            if notifier.icon is not None:
-                icon = Gio.Icon.new_for_string(notifier.icon)
-                target.set_icon(icon)
-            if notifier.title is not None:
-                target.set_title(notifier.title)
-            if notifier.body is not None:
-                target.set_body(notifier.body)
-            if notifier.category is not None:
-                target.set_category(notifier.category)
-            if notifier.priority is not None:
-                target.set_priority(notifier.priority)
-            self.application.send_notification(notifier.identifier, target)
-        if not notifier.active and notifier.sent is not None:
-            notifier._sent = None
-            notifier._timeout = None
-            self.application.withdraw_notification(notifier.identifier)
-
-    def update(self):
-        for notifier in self._notifiers.values():
-            self.commit_notifier(notifier)
-        new_pending = list()
-        for notifier in self._pending:
-            self.commit_notifier(notifier)
-            if notifier.active:
-                new_pending.append(notifier)
-        self._pending = new_pending
-        self.invalid = False
-
-    def close(self):
-        for notifier in list(self._notifiers.values()):
-            notifier.close()
 
 ###
 #
@@ -485,8 +118,7 @@ class Application(Gtk.Application):
         #self.network_manager = openvpn3.NetCfgManager(self.dbus)
         #self.network_manager.SubscribeNetworkChange(self.on_network_manager_event)
 
-        secret_connection = secretstorage.dbus_init()
-        self.secret_collection = secretstorage.get_default_collection(secret_connection)
+        self.credential_store = CredentialStore()
 
         self.configs = dict()
         self.sessions = dict()
@@ -863,50 +495,20 @@ class Application(Gtk.Application):
         webbrowser.open_new(url)
 
     def store_set_credentials(self, config_id, credentials):
-        if self.secret_collection.is_locked():
-            self.secret_collection.unlock()
+        store = self.credential_store[config_id]
         for key, value in credentials.items():
-            attrs = {
-                'application': APPLICATION_NAME,
-                'config': str(config_id),
-                'key' : str(key),
-            }
-            label = f'OpenVPN3 Indicator {config_id} {key}'
-            self.secret_collection.create_item(
-                    label,
-                    attrs,
-                    bytes(str(value), 'utf-8'),
-                    replace=True)
-            logging.debug(f'Storing secret {label}')
+            store[key] = value
 
     def store_clear_credentials(self, config_id):
-        if self.secret_collection.is_locked():
-            self.secret_collection.unlock()
-        secrets = list(self.secret_collection.search_items({'application': APPLICATION_NAME, 'config': str(config_id)}))
-        for secret in secrets:
-            secret_attrs = secret.get_attributes()
-            if secret_attrs.get('application', '') != APPLICATION_NAME:
-                continue
-            if secret_attrs.get('config', '') != config_id:
-                continue
-            logging.debug(f'Cleared secret {secret.get_label()}')
-            secret.delete()
+        store = self.credential_store[config_id]
+        for key in store.keys():
+            del store[key]
 
     def store_get_credentials(self, config_id):
         credentials = dict()
-        if self.secret_collection.is_locked():
-            self.secret_collection.unlock()
-        secrets = list(self.secret_collection.search_items({'application': APPLICATION_NAME, 'config': str(config_id)}))
-        for secret in secrets:
-            secret_attrs = secret.get_attributes()
-            if secret_attrs.get('application', '') != APPLICATION_NAME:
-                continue
-            if secret_attrs.get('config', '') != config_id:
-                continue
-            secret_key = secret_attrs.get('key', '')
-            if secret_key:
-                logging.debug(f'Retrieved secret {secret.get_label()}')
-                credentials[secret_key] = str(secret.get_secret(), 'utf-8')
+        store = self.credential_store[config_id]
+        for key in store.keys():
+            credentials[key] = store[key]
         return credentials
 
     def action_get_credentials(self, _object, session_id, required_credentials, force_ui=False):
@@ -1170,19 +772,3 @@ class Application(Gtk.Application):
     def action_quit(self, _object):
         logging.info(f'Quit')
         self.release()
-
-###
-#
-# Main
-#
-###
-
-if __name__ == '__main__':
-    try:
-        import setproctitle
-        setproctitle.setproctitle(f'{APPLICATION_NAME}')
-    except ImportError:
-        pass
-    app = Application()
-    app.run(sys.argv)
-

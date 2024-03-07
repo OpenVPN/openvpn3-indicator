@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+
+import argparse
+import pathlib
+import subprocess
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--directory', required=True)
+parser.add_argument('--executable', required=True)
+args = parser.parse_args()
+directory = pathlib.Path(args.directory)
+executable = pathlib.Path(args.executable)
+
+assert directory.is_dir()
+
+header = b'#!/usr/bin/env python3\n'
+
+binary = subprocess.run(['zip', '-', '--recurse-paths', '-9', '.', ],  cwd=directory, stdout=subprocess.PIPE).stdout
+
+executable.write_bytes(header + binary)
+executable.chmod(0o755)
