@@ -78,11 +78,12 @@ It should be considered as a temporary work-around until Network Manager impleme
     BUILDARCH = 'noarch'
     COMPAT = '10'
     BUILDREQUIRES = [
+            f'debhelper (>= {COMPAT})',
             'desktop-file-utils',
             'make',
-            'sed',
             'python3',
-            f'debhelper (>= {COMPAT})',
+            'sed',
+            'zip',
         ]
     REQUIRES  = [
             'openvpn3',

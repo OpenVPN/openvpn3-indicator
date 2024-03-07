@@ -72,7 +72,9 @@ BUILDARCH = 'noarch'
 BUILDREQUIRES = ' '.join(sorted([
         'desktop-file-utils',
         'make',
+        'python3',
         'sed',
+        'zip',
     ]))
 REQUIRES  = ' '.join(sorted([
         'openvpn3-client',
