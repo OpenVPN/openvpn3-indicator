@@ -10,7 +10,9 @@ It is a temporary solution until Network Manager supports OpenVPN3.
 
 ## Example use
 
-[![example](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/docs/example.png)](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/docs/example.mp4)
+[![example](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/docs/example.png)](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/docs/example.webm)
+
+https://github.com/OpenVPN/openvpn3-indicator/assets/5970093/b9245e81-7896-4b53-b2c2-e03e00cbc35c
 
 ## Prerequisites
 
