@@ -2,7 +2,7 @@
 # vim:ts=4:sts=4:sw=4:expandtab
 
 #
-# openvpn3-indicator - Simple GTK indicator GUI for OpenVPN3.
+# openvpn3-indicator - Simple indicator application for OpenVPN3.
 # Copyright (C) 2024 Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -24,7 +24,7 @@ import logging
 import sys
 import traceback
 
-from openvpn3_indicator.about import *
+from openvpn3_indicator.about import APPLICATION_NAME
 from openvpn3_indicator.application import Application
 
 ###
@@ -33,14 +33,17 @@ from openvpn3_indicator.application import Application
 #
 ###
 
+
 def main():
     try:
         import setproctitle
         setproctitle.setproctitle(f'{APPLICATION_NAME}')
     except ImportError:
-        pass
+        logging.debug(traceback.format_exc())
+        logging.error('Failed to import setproctitle module')
     application = Application()
     application.run(sys.argv)
+
 
 if __name__ == '__main__':
     main()

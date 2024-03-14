@@ -20,18 +20,25 @@
 # If not, see <https://www.gnu.org/licenses/>.
 #
 
+import gi
+gi.require_version('Gtk', '3.0')
+from gi.repository import GLib, GObject, Gtk, Gio
 
-APPLICATION_NAME = 'openvpn3-indicator'
-APPLICATION_TITLE = 'OpenVPN3 Indicator'
-APPLICATION_ID = 'net.openvpn.openvpn3_indicator'
-APPLICATION_AUTHORS = [
-        'Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>',
-    ]
-APPLICATION_URL = 'https://github.com/OpenVPN/openvpn3-indicator'
-APPLICATION_VERSION = '0.1'
-APPLICATION_DESCRIPTION_SHORT = 'Simple indicator application for OpenVPN3'
-APPLICATION_DESCRIPTION_LONG = '''
-This is a simple indicator application that controls OpenVPN3 tunnels.
-It is based on D-Bus interface provided by OpenVPN3 Linux client.
-It is a temporary solution until Network Manager supports OpenVPN3.
-'''.strip()
+from openvpn3_indicator.about import APPLICATION_NAME, APPLICATION_TITLE, APPLICATION_VERSION, APPLICATION_AUTHORS, APPLICATION_URL, APPLICATION_DESCRIPTION_SHORT
+
+
+def construct_about_dialog():
+    dialog = Gtk.AboutDialog()
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
+    dialog.set_icon_name(APPLICATION_NAME)
+
+    dialog.set_program_name(APPLICATION_TITLE)
+    dialog.set_logo_icon_name(APPLICATION_NAME)
+    dialog.set_version(APPLICATION_VERSION)
+    dialog.set_comments(APPLICATION_DESCRIPTION_SHORT)
+    dialog.set_website(APPLICATION_URL)
+    dialog.set_license_type(Gtk.License.AGPL_3_0)
+    dialog.set_authors(APPLICATION_AUTHORS)
+    dialog.show_all()
+    return dialog

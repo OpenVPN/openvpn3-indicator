@@ -8,12 +8,13 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
+from openvpn3_indicator.about import *
 from openvpn3_indicator.credential_store import CredentialStore
 
 class Test(Gtk.Application):
     def __init__(self):
         Gtk.Application.__init__(self,
-            application_id='net.openvpn.openvpn3_indicator.test.credential_store',
+            application_id=APPLICATION_ID,
             )
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
@@ -35,7 +36,7 @@ class Test(Gtk.Application):
         print(self.credential_store['unknown']['unset'])
         GLib.timeout_add(1000, self.on_schedule)
         GLib.timeout_add(5000, self.action_quit)
-    
+
     def on_schedule(self, *args, **kwargs):
         GLib.timeout_add(1000, self.on_schedule)
 

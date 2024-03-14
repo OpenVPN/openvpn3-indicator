@@ -2,7 +2,7 @@
 # vim:ts=4:sts=4:sw=4:expandtab
 
 #
-# openvpn3-indicator - Simple GTK indicator GUI for OpenVPN3.
+# openvpn3-indicator - Simple indicator application for OpenVPN3.
 # Copyright (C) 2024 Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -52,7 +52,7 @@ class MultiNotifier():
         self._notifiers = dict()
         self._pending = list()
         self.default_icon = f'{APPLICATION_NAME}'
-        self.default_title = f'{APPLICATION_DESCRIPTION}'
+        self.default_title = f'{APPLICATION_TITLE}'
         self.default_body = None
         self.default_category = None
         self.default_priority = Gio.NotificationPriority.NORMAL

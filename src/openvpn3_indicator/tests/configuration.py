@@ -8,8 +8,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
-from openvpn3_indicator.about import *
-from openvpn3_indicator.multi_notifier import MultiNotifier
+from openvpn3_indicator.about import APPLICATION_ID
+from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog
 
 class Test(Gtk.Application):
     def __init__(self):
@@ -23,22 +23,19 @@ class Test(Gtk.Application):
         pass
     def on_startup(self, *args, **kwargs):
         self.hold()
-        self.multi_notifier = MultiNotifier(self, 'Test App')
-        
-        self.first_notifier = self.multi_notifier.new_notifier(
-            identifier = 'startup',
-            title = 'Test App',
-            body = 'Started',
-            icon = 'openvpn3-indicator',
-            active = True,
-            timespan = 10,
-        )
+
+        dialog = construct_configuration_select_dialog(on_import=self.action_import, on_cancel=self.action_quit)
+        dialog.set_visible(True)
+
         GLib.timeout_add(1000, self.on_schedule)
-        GLib.timeout_add(5000, self.action_quit)
+        GLib.timeout_add(60000, self.action_quit)
 
     def on_schedule(self, *args, **kwargs):
-        self.multi_notifier.update()
         GLib.timeout_add(1000, self.on_schedule)
+
+    def action_import(self, *args, **kwargs):
+        print(f'Result: {args} {kwargs}')
+        self.action_quit()
 
     def action_quit(self, *args, **kwargs):
         self.release()

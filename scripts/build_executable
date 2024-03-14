@@ -15,7 +15,10 @@ assert directory.is_dir()
 
 header = b'#!/usr/bin/env python3\n'
 
-binary = subprocess.run(['zip', '-', '--recurse-paths', '-9', '.', ],  cwd=directory, stdout=subprocess.PIPE).stdout
+binary = subprocess.run(
+            ['zip', '-', '--recurse-paths', '-9', '.', ],
+            cwd=directory, stdout=subprocess.PIPE
+        ).stdout
 
 executable.write_bytes(header + binary)
 executable.chmod(0o755)

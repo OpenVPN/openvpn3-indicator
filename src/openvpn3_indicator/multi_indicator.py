@@ -2,7 +2,7 @@
 # vim:ts=4:sts=4:sw=4:expandtab
 
 #
-# openvpn3-indicator - Simple GTK indicator GUI for OpenVPN3.
+# openvpn3-indicator - Simple indicator application for OpenVPN3.
 # Copyright (C) 2024 Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -42,6 +42,7 @@ from openvpn3_indicator.about import *
 ###
 
 class MultiIndicator():
+
     @property
     def identifier(self):
         return self._identifier
@@ -60,7 +61,6 @@ class MultiIndicator():
                 )
             sub.set_ordering_index(num)
             self._sub_indicators.append(sub)
-
         return self._sub_indicators[num]
 
     def __init__(self, identifier):
@@ -68,8 +68,8 @@ class MultiIndicator():
         self._sub_indicators = list()
         self._indicators = dict()
         self.default_icon = f'{APPLICATION_NAME}'
-        self.default_description = f'{APPLICATION_DESCRIPTION}'
-        self.default_title = f'{APPLICATION_DESCRIPTION}'
+        self.default_description = f'{APPLICATION_TITLE}'
+        self.default_title = f'{APPLICATION_TITLE}'
         self.default_category = AppIndicator3.IndicatorCategory.SYSTEM_SERVICES
         self.invalid = False
 
@@ -77,9 +77,11 @@ class MultiIndicator():
         self.invalid = True
 
     class Indicator():
+
         @property
         def parent(self):
             return self._parent
+
         @property
         def identifier(self):
             return self._identifier
@@ -93,9 +95,11 @@ class MultiIndicator():
             self._title = title or self.parent.default_title
             self._order_key = order_key or self.identifier
             self._menu = menu
+
         def close(self):
             if self.parent:
                 self.parent.del_indicator(self)
+
         @property
         def active(self):
             return self._active
@@ -106,6 +110,7 @@ class MultiIndicator():
                 self._active = active
                 if self.parent:
                     self.parent.invalidate()
+
         @property
         def icon(self):
             return self._icon
@@ -116,6 +121,7 @@ class MultiIndicator():
                 self._icon = icon
                 if self.parent and self.active:
                     self.parent.invalidate()
+
         @property
         def description(self):
             return self._description
@@ -126,6 +132,7 @@ class MultiIndicator():
                 self._description = description
                 if self.parent and self.active:
                     self.parent.invalidate()
+
         @property
         def title(self):
             return self._title
@@ -136,6 +143,7 @@ class MultiIndicator():
                 self._title = title
                 if self.parent and self.active:
                     self.parent.invalidate()
+
         @property
         def order_key(self):
             return self._order_key
@@ -146,6 +154,7 @@ class MultiIndicator():
                 self._order_key = order_key
                 if self.parent and self.active:
                     self.parent.invalidate()
+
         @property
         def menu(self):
             return self._menu
@@ -164,6 +173,7 @@ class MultiIndicator():
         if indicator.active:
             self.invalidate()
         return indicator
+
     def del_indicator(self, indicator):
         if indicator.parent == self:
             if indicator.identifier in self._indicators:

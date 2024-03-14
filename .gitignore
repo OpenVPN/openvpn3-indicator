@@ -9,3 +9,4 @@ __pycache__
 /dist/
 /openvpn3-indicator
 /tests/.vagrant
+/tests/configurations/client_connexa.ovpn
