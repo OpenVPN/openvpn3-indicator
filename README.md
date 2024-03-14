@@ -1,19 +1,23 @@
 # ![logo](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/share/icons/hicolor/scalable/apps/openvpn3-indicator.svg) openvpn3-indicator
 
-Simple GTK indicator GUI for OpenVPN3.
+Simple indicator application for OpenVPN3.
 
 ## Description
 
-This project adds a simple GTK indicator application that can be used to control OpenVPN3 tunnels.
-It is based on D-Bus interface provided by OpenVPN3 Linux client and does not require elevated privileges to use.
-It should be considered as a temporary work-around until Network Manager implements support for OpenVPN 3, or OpenVPN provides a graphical interface for Linux users.
+This is a simple indicator application that controls OpenVPN3 tunnels.
+It is based on D-Bus interface provided by OpenVPN3 Linux client.
+It is a temporary solution until Network Manager supports OpenVPN3.
+
+## Example use
+
+![example](https://raw.githubusercontent.com/OpenVPN/openvpn3-indicator/main/docs/example.webm)
 
 ## Prerequisites
 
 This application requires the installation of `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
 There are [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
 
-## Installation instructions
+## Installation instructions (from repositories)
 
 Package `openvpn3-indicator` can be installed on popular Linux distributions using the provided repositories.
 
@@ -37,7 +41,7 @@ sudo dnf copr enable grzegorz-gutowski/openvpn3-indicator
 sudo dnf install openvpn3-indicator
 ```
 
-## Installation instructions (for developers)
+## Installation instructions (from sources)
 
 ### Prerequisites
 
