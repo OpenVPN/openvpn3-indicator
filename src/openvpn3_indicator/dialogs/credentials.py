@@ -62,8 +62,9 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
         if user_input.value is not None:
             entry.set_text(user_input.value)
             default_store = True
-        entries.append(entry)
+        entry.set_activates_default(True)
         grid.attach(entry, 1, row, 1, 1)
+        entries.append(entry)
         row += 1
     if allow_store:
         store_button = Gtk.CheckButton(label='Store credentials', hexpand=True, margin_top=10)
@@ -90,5 +91,8 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
 
     dialog.connect('destroy', on_dialog_destroy)
     dialog.connect('response', on_dialog_response)
+    default = dialog.get_widget_for_response(response_id=Gtk.ResponseType.OK)
+    default.set_can_default(True)
+    default.grab_default()
     dialog.show_all()
     return dialog

@@ -39,7 +39,7 @@ def construct_configuration_select_dialog(name=None, on_import=None, on_cancel=N
         )
     ovpn_filter = Gtk.FileFilter()
     ovpn_filter.set_name('OpenVPN Configuration Files')
-    ovpn_filter.add_mime_type('text/openvpn-config')
+    ovpn_filter.add_mime_type('text/openvpn-configuration')
     dialog.add_filter(ovpn_filter)
     text_filter = Gtk.FileFilter()
     text_filter.set_name('Text Files')
@@ -91,6 +91,7 @@ def construct_configuration_import_dialog(path, name=None, on_import=None, on_ca
     grid.attach(Gtk.Label(label='Configuration Name', hexpand=True, xalign=0, margin_right=10), 0, 1, 1, 1)
     entry = Gtk.Entry(hexpand=True)
     entry.set_text(name)
+    entry.set_activates_default(True)
     grid.attach(entry, 1, 1, 1, 1)
 
     content_area.add(grid)
@@ -109,6 +110,9 @@ def construct_configuration_import_dialog(path, name=None, on_import=None, on_ca
 
     dialog.connect('destroy', on_dialog_destroy)
     dialog.connect('response', on_dialog_response)
+    default = dialog.get_widget_for_response(response_id=Gtk.ResponseType.OK)
+    default.set_can_default(True)
+    default.grab_default()
     dialog.show_all()
     return dialog
 
@@ -144,5 +148,9 @@ def construct_configuration_remove_dialog(name, on_remove=None, on_cancel=None):
 
     dialog.connect('destroy', on_dialog_destroy)
     dialog.connect('response', on_dialog_response)
+    default = dialog.get_widget_for_response(response_id=Gtk.ResponseType.OK)
+    default.set_can_default(True)
+    default.grab_default()
+    dialog.show_all()
     dialog.show_all()
     return dialog
