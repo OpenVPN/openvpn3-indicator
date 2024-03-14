@@ -379,9 +379,9 @@ class Application(Gtk.Application):
         major = status['major']
         minor = status['minor']
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
-            return f'{APPLICATION_NAME}-configuring'
+            return f'{APPLICATION_NAME}-loading'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
-            return f'{APPLICATION_NAME}-configuring'
+            return f'{APPLICATION_NAME}-loading'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
             return f'{APPLICATION_NAME}-active-error'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
@@ -393,7 +393,7 @@ class Application(Gtk.Application):
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
             return f'{APPLICATION_NAME}-idle'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
-            return f'{APPLICATION_NAME}-configuring'
+            return f'{APPLICATION_NAME}-loading'
         return f'{APPLICATION_NAME}-active'
 
     def session_description(self, session_id):
@@ -413,7 +413,7 @@ class Application(Gtk.Application):
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
             return f'Disconnected'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
-            return f'Done'
+            return f'Disconnected'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
             return f'Authentication required'
         return f'Connected'

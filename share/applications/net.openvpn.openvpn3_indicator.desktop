@@ -1,7 +1,7 @@
 [Desktop Entry]
 Icon=openvpn3-indicator
-Name=OpenVPN3 GTK indicator GUI
-Comment=Simple GTK indicator GUI for OpenVPN3
+Name=OpenVPN3 Indicator
+Comment=Simple indicator application for OpenVPN3
 Exec=/usr/bin/openvpn3-indicator
 Terminal=false
 Type=Application

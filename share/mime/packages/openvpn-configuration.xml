@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/openvpn-configuration">
+    <alias type="text/openvpn-config"/>
+    <sub-class-of type="text/plain"/>
+    <generic-icon name="text-x-generic"/>
+    <icon name="text-openvpn-configuration"/>
+    <glob pattern="*.ovpn"/>
+    <comment>OpenVPN configuration file</comment>
+    <comment xml:lang="pl">Plik konfiguracji OpenVPN</comment>
+    <comment xml:lang="uk">файл конфігурації OpenVPN</comment>
+    <comment xml:lang="de">OpenVPN-Konfigurationsdatei</comment>
+    <comment xml:lang="fr">fichier de configuration OpenVPN</comment>
+  </mime-type>
+</mime-info>

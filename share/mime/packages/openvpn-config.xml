@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="text/openvpn-config">
-    <comment>OpenVPN Config</comment>
-    <sub-class-of type="text/plain"/>
-    <glob pattern="*.ovpn"/>
-  </mime-type>
-</mime-info>
