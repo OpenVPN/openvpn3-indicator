@@ -1,8 +1,11 @@
 *.bak
 *.swp
+*.egg-info
 __pycache__
 /.copr/*.spec
 /.copr/*.tar.gz
 /.copr/*.rpm
-/build
+/build/
+/dist/
 /openvpn3-indicator
+/tests/.vagrant

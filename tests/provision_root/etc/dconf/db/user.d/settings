@@ -1,0 +1,43 @@
+[org/gnome/settings-daemon/plugins/color]
+night-light-enabled=false
+
+[org/gnome/shell]
+enabled-extensions=['ubuntu-appindicators@ubuntu.com', 'ubuntu-dock@ubuntu.com']
+favorite-apps=['org.gnome.Terminal.desktop', 'org.gnome.Nautilus.desktop', 'firefox_firefox.desktop']
+
+[org/gnome/nautilus/desktop]
+home-icon-visible=false
+trash-icon-visible=false
+
+[org/gnome/desktop/notifications]
+show-in-lock-screen=false
+
+[org/gnome/desktop/interface]
+gtk-theme='Yaru-dark'
+color-scheme='prefer-dark'
+clock-show-date=false
+clock-show-seconds=false
+enable-animations=false
+
+[org/gnome/desktop/background]
+picture-uri-dark='file:///usr/share/backgrounds/warty-final-ubuntu.png'
+
+[org/gnome/desktop/media-handling]
+autorun-never=true
+
+[org/gnome/desktop/session]
+idle-delay=uint32 0
+[org/gnome/settings-daemon/plugins/power]
+active=false
+sleep-inactive-ac-type='nothing'
+
+[org/gnome/desktop/screensaver]
+idle-activation-enabled=false
+lock-enabled=false
+ubuntu-lock-on-suspend=false
+
+[org/gnome/shell/extensions/ding]
+show-home=false
+
+[org/gnome/shell/extensions/dash-to-dock]
+dock-fixed=false
