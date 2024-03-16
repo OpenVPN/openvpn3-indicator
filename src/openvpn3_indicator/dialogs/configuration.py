@@ -39,7 +39,7 @@ def construct_configuration_select_dialog(name=None, on_import=None, on_cancel=N
         )
     ovpn_filter = Gtk.FileFilter()
     ovpn_filter.set_name('OpenVPN Configuration Files')
-    ovpn_filter.add_mime_type('text/openvpn-configuration')
+    ovpn_filter.add_mime_type('application/x-openvpn-profile')
     dialog.add_filter(ovpn_filter)
     text_filter = Gtk.FileFilter()
     text_filter.set_name('Text Files')

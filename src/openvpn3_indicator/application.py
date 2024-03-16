@@ -688,7 +688,7 @@ class Application(Gtk.Application):
         dialog.set_visible(True)
 
     def action_config_open(self, path):
-        logging.info(f'Import Config {config_path}')
+        logging.info(f'Import Config {path}')
         dialog = construct_configuration_import_dialog(path=path, on_import=self.on_config_import)
         dialog.set_visible(True)
 
