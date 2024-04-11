@@ -117,6 +117,22 @@ class Application(Gtk.Application):
         self.session_manager = openvpn3.SessionManager(self.dbus)
         self.session_manager.SessionManagerCallback(self.on_session_manager_event)
 
+        # Detect if the config manager version is v21 or newer
+        # TODO: This can be simplified once the openvpn3 module provides
+        #       a version query API
+        self.manager_version = 0
+        cmgr_obj = self.dbus.get_object('net.openvpn.v3.configuration','/net/openvpn/v3/configuration')
+        cmgr_prop = dbus.Interface(cmgr_obj, dbus_interface='org.freedesktop.DBus.Properties')
+        cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
+        if cmgr_version.startswith('git:'):
+            # development version: presume all features are available
+            # and use a high version number
+            self.manager_version = 9999
+        elif cmgr_version.startswith('v'):
+            # Version identifiers may cary a "release label",
+            # like v19_beta, v22_dev
+            self.manager_version = int(cmgr_version[1:].split('_')[0])
+
         self.credential_store = CredentialStore()
 
         self.configs = dict()
@@ -676,7 +692,17 @@ class Application(Gtk.Application):
         try:
             parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', path], '')
             config_description = parser.GenerateConfig()
-            self.config_manager.Import(name, config_description, single_use=False, persistent=True, system_tag=None)
+
+            import_args = {
+                'cfgname': name,
+                'cfg': config_description,
+                'single_use': False,
+                'persistent': True
+                }
+            if self.manager_version > 20:
+                # system_tag arrived in openvpn3-linux v21
+                import_args['system_tag'] = 'ovpn3indc'
+            self.config_manager.Import(**import_args)
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
