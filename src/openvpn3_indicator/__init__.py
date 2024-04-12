@@ -20,13 +20,6 @@
 # If not, see <https://www.gnu.org/licenses/>.
 #
 
-import logging
-import sys
-import traceback
-
-from openvpn3_indicator.about import APPLICATION_NAME
-from openvpn3_indicator.application import Application
-
 ###
 #
 # Main
@@ -34,7 +27,12 @@ from openvpn3_indicator.application import Application
 ###
 
 
-def main():
+def main(args=None):
+    import logging
+    import sys
+    import traceback
+    from openvpn3_indicator.about import APPLICATION_NAME
+    from openvpn3_indicator.application import Application
     try:
         import setproctitle
         setproctitle.setproctitle(f'{APPLICATION_NAME}')
@@ -42,7 +40,9 @@ def main():
         logging.debug(traceback.format_exc())
         logging.error('Failed to import setproctitle module')
     application = Application()
-    application.run(sys.argv)
+    if args is None:
+        args = sys.argv
+    application.run(args)
 
 
 if __name__ == '__main__':

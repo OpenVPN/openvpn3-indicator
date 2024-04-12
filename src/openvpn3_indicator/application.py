@@ -20,13 +20,10 @@
 # If not, see <https://www.gnu.org/licenses/>.
 #
 
-import argparse
 import gettext
 import logging
-import sys
 import time
 import traceback
-import uuid
 
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
@@ -143,7 +140,7 @@ class Application(Gtk.Application):
         self.name_configs = dict()
         self.config_sessions = dict()
         self.session_configs = dict()
-        self.session_failed_authentications = set()
+        self.failed_authentications = set()
         self.session_dialogs = dict()
         self.session_statuses = dict()
 
@@ -223,8 +220,8 @@ class Application(Gtk.Application):
 
     def refresh_sessions(self):
         if self.invalid_sessions:
+            new_session_ids = set()
             try:
-                new_session_ids = set()
                 new_sessions = dict()
                 for session in self.session_manager.FetchAvailableSessions():
                     session_id = str(session.GetPath())
@@ -368,7 +365,7 @@ class Application(Gtk.Application):
                 for session_id in session_ids:
                     #TODO: Add some information on session status to menu items (perhaps in the title?)
                     session = self.sessions[session_id]
-                    session_menu = self.construct_menu_session(config_id, session_id)
+                    session_menu = self.construct_menu_session(session_id)
                     menu_item = Gtk.MenuItem.new_with_label(config_name)
                     menu_item.set_submenu(session_menu)
                     menu.append(menu_item)
@@ -486,7 +483,17 @@ class Application(Gtk.Application):
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
             #TODO: Notify authentication failure
             #TODO: Record authentication failure
+
             self.action_session_disconnect(None, session_id)
+            config_id = self.session_configs.get(session_id, None)
+            if config_id is not None:
+                self.failed_authentications.add(config_id)
+                self.action_config_connect(None, config_id)
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_CONNECTED == minor:
+            config_id = self.session_configs.get(session_id, None)
+            if config_id is not None and config_id in self.failed_authentications:
+                self.failed_authentications.remove(config_id)
+
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
             #TODO: Notify connection failure
             #TODO: Record connection failure
@@ -504,14 +511,18 @@ class Application(Gtk.Application):
                     description = str(input_slot.GetLabel())
                     mask = bool(input_slot.GetInputMask())
                     required_credentials.append((description, mask))
+                force_ui = False
+                config_id = self.session_configs.get(session_id, None)
+                if config_id is not None:
+                    if config_id in self.failed_authentications:
+                        force_ui = True
+                self.action_get_credentials(None, session_id, required_credentials, force_ui=force_ui)
             except: #TODO: Catch only expected exceptions
                 logging.debug(traceback.format_exc())
                 #TODO: Catch only expected exceptions
                 #TODO: Notify authentication failure
                 #TODO: Record authentication failure
                 self.action_session_disconnect(None, session_id)
-
-            self.action_get_credentials(None, session_id, required_credentials)#, force_ui=True)
         self.notify_session_change(session_id)
 
     def action_auth_url(self, _object, session_id, url):
