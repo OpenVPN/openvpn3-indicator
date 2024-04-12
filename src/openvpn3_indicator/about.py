@@ -24,6 +24,7 @@
 APPLICATION_NAME = 'openvpn3-indicator'
 APPLICATION_TITLE = 'OpenVPN3 Indicator'
 APPLICATION_ID = 'net.openvpn.openvpn3_indicator'
+APPLICATION_SYSTEM_TAG = 'openvpn3-indicator'
 APPLICATION_AUTHORS = [
         'Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>',
     ]

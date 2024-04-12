@@ -43,7 +43,7 @@ import webbrowser
 
 import openvpn3
 
-from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLICATION_NAME, APPLICATION_TITLE
+from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLICATION_NAME, APPLICATION_TITLE, APPLICATION_SYSTEM_TAG
 from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
 from openvpn3_indicator.credential_store import CredentialStore
@@ -132,6 +132,7 @@ class Application(Gtk.Application):
             # Version identifiers may cary a "release label",
             # like v19_beta, v22_dev
             self.manager_version = int(cmgr_version[1:].split('_')[0])
+        logging.debug(f'Running with manager version {self.manager_version}')
 
         self.credential_store = CredentialStore()
 
@@ -692,17 +693,11 @@ class Application(Gtk.Application):
         try:
             parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', path], '')
             config_description = parser.GenerateConfig()
-
-            import_args = {
-                'cfgname': name,
-                'cfg': config_description,
-                'single_use': False,
-                'persistent': True
-                }
+            import_args = dict()
             if self.manager_version > 20:
                 # system_tag arrived in openvpn3-linux v21
-                import_args['system_tag'] = 'ovpn3indc'
-            self.config_manager.Import(**import_args)
+                import_args['system_tag'] = APPLICATION_SYSTEM_TAG
+            self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
