@@ -31,7 +31,7 @@ from openvpn3_indicator.about import APPLICATION_NAME
 
 CredentialsUserInput = collections.namedtuple(
         'CredentialsUserInput',
-        ['name', 'mask', 'value']
+        ['name', 'mask', 'value', 'can_store']
     )
 
 
@@ -53,12 +53,15 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
     row = 1
     entries = list()
     default_store = False
+    can_store = False
     for user_input in user_inputs:
         label = Gtk.Label(label=user_input.name, hexpand=True, xalign=0, margin_right=10)
         grid.attach(label, 0, row, 1, 1)
         entry = Gtk.Entry(hexpand=True)
         if user_input.mask:
             entry.set_visibility(False)
+        if user_input.can_store:
+            can_store = True
         if user_input.value is not None:
             entry.set_text(user_input.value)
             default_store = True
@@ -66,7 +69,7 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
         grid.attach(entry, 1, row, 1, 1)
         entries.append(entry)
         row += 1
-    if allow_store:
+    if can_store and allow_store:
         store_button = Gtk.CheckButton(label='Store credentials', hexpand=True, margin_top=10)
         store_button.set_active(default_store)
         grid.attach(store_button, 0, row, 2, 1)
@@ -82,9 +85,9 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
             if on_connect is not None:
                 results = list()
                 for user_input, entry in zip(user_inputs, entries):
-                    results.append(CredentialsUserInput(name=user_input.name, mask=user_input.mask, value=entry.get_text()))
+                    results.append(CredentialsUserInput(name=user_input.name, mask=user_input.mask, value=entry.get_text(), can_store=user_input.can_store))
                 store = None
-                if allow_store:
+                if can_store and allow_store:
                     store = store_button.get_active()
                 on_connect(user_inputs=results, store=store)
         dialog.destroy()

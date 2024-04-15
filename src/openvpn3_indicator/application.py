@@ -48,11 +48,11 @@ from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 
+#TODO: Which input slots should not be stored ? (OTPs, etc.)
+#TODO: Understand better the possible session state changes
 #TODO: Present session state (change icon on errors, etc.)
 #TODO: Notify user on some of the session state changes
-#TODO: Ask for user confirmation when removing config (and maybe in some other places?)
 #TODO: Collect and present session logs and stats
-#TODO: Understand better the possible session state changes
 #TODO: Implement other than AppIndicator ways to have system tray icon
 #TODO: /usr/share/metainfo ?
 #TODO: Understand mimetype icons inheritance
@@ -394,6 +394,10 @@ class Application(Gtk.Application):
         minor = status['minor']
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
             return f'{APPLICATION_NAME}-loading'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_USERPASS == minor:
+            return f'{APPLICATION_NAME}-loading'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_CHALLENGE == minor:
+            return f'{APPLICATION_NAME}-loading'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
             return f'{APPLICATION_NAME}-loading'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
@@ -416,6 +420,10 @@ class Application(Gtk.Application):
         minor = status['minor']
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
             return f'Configuration OK'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_USERPASS == minor:
+            return f'Authentication required'
+        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_CHALLENGE == minor:
+            return f'Authentication required'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
             return f'Authentication required'
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
@@ -454,6 +462,21 @@ class Application(Gtk.Application):
 
     def on_network_manager_event(self, event):
         logging.info(f'Network Manager Event {event}')
+
+    def can_store_input_slot(self, input_slot):
+        type, group = input_slot.GetTypeGroup()
+        result = type == openvpn3.ClientAttentionType.CREDENTIALS and group in [
+                openvpn3.ClientAttentionGroup.UNSET,
+                openvpn3.ClientAttentionGroup.USER_PASSWORD,
+                openvpn3.ClientAttentionGroup.HTTP_PROXY_CREDS,
+                openvpn3.ClientAttentionGroup.PK_PASSPHRASE,
+                #openvpn3.ClientAttentionGroup.CHALLENGE_STATIC,
+                #openvpn3.ClientAttentionGroup.CHALLENGE_DYNAMIC,
+                #openvpn3.ClientAttentionGroup.CHALLENGE_AUTH_PENDING,
+            ]
+        logging.debug(f'Input slot {input_slot.GetLabel()} of type {type}, group {group} is decided {"not " if not result else ""}safe for storage')
+        return result
+        print(type,group)
 
     def on_session_event(self, session_id, major, minor, message):
         session = self.sessions[session_id]
@@ -510,7 +533,8 @@ class Application(Gtk.Application):
                         continue
                     description = str(input_slot.GetLabel())
                     mask = bool(input_slot.GetInputMask())
-                    required_credentials.append((description, mask))
+                    can_store = self.can_store_input_slot(input_slot)
+                    required_credentials.append((description, mask, can_store))
                 force_ui = False
                 config_id = self.session_configs.get(session_id, None)
                 if config_id is not None:
@@ -533,10 +557,11 @@ class Application(Gtk.Application):
         for key, value in credentials.items():
             store[key] = value
 
-    def store_clear_credentials(self, config_id):
+    def store_clear_credentials(self, config_id, credentials_keys):
         store = self.credential_store[config_id]
         for key in store.keys():
-            del store[key]
+            if key in credentials_keys:
+                del store[key]
 
     def store_get_credentials(self, config_id):
         credentials = dict()
@@ -547,7 +572,7 @@ class Application(Gtk.Application):
 
     def action_get_credentials(self, _object, session_id, required_credentials, force_ui=False):
         credentials = dict()
-        required_keys = set([ description for description, mask in required_credentials ])
+        required_keys = set([ description for description, mask, can_store in required_credentials ])
         config_id = self.session_configs.get(session_id, None)
         if config_id is not None:
             for key, value in self.store_get_credentials(config_id).items():
@@ -564,12 +589,15 @@ class Application(Gtk.Application):
             user_inputs = [ CredentialsUserInput(
                     name=description,
                     mask=mask,
-                    value=credentials.get(description, None))
-                for description, mask in required_credentials ]
+                    value=credentials.get(description, None) if can_store else None,
+                    can_store=can_store)
+                for description, mask, can_store in required_credentials ]
 
 
             def on_cancel():
-                status = self.session_statuses[session_id]
+                status = self.session_statuses.get(session_id, None)
+                if status is None:
+                    return
                 major = status['major']
                 minor = status['minor']
                 if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
@@ -580,9 +608,10 @@ class Application(Gtk.Application):
             def on_connect(user_inputs, store):
                 credentials = dict([ (ui.name, ui.value) for ui in user_inputs ])
                 if store:
-                    self.store_set_credentials(config_id, credentials)
+                    store_credentials = dict([ (ui.name, ui.value) for ui in user_inputs if ui.can_store ])
+                    self.store_set_credentials(config_id, store_credentials)
                 else:
-                    self.store_clear_credentials(config_id)
+                    self.store_clear_credentials(config_id, credentials.keys())
                 if session_id in self.session_dialogs:
                     del self.session_dialogs[session_id]
                 self.on_session_credentials(session_id, credentials)
@@ -613,7 +642,7 @@ class Application(Gtk.Application):
     def on_schedule(self):
         logging.debug(f'Schedule')
         if self.last_invalid + 30 < time.monotonic():
-            logging.debug('ref')
+            logging.debug('Forced refresh of sessions')
             self.invalid_sessions = True
         if self.invalid_sessions:
             self.last_invalid = time.monotonic()
