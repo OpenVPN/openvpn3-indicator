@@ -24,7 +24,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, GObject, Gtk, Gio
 
-from openvpn3_indicator.about import APPLICATION_NAME
+from openvpn3_indicator.about import APPLICATION_NAME, CONFIGURATION_MIME_TYPE
 
 DEFAULT_CONFIG_NAME = 'NEW'
 
@@ -39,7 +39,7 @@ def construct_configuration_select_dialog(name=None, on_import=None, on_cancel=N
         )
     ovpn_filter = Gtk.FileFilter()
     ovpn_filter.set_name('OpenVPN Configuration Files')
-    ovpn_filter.add_mime_type('application/x-openvpn-profile')
+    ovpn_filter.add_mime_type(CONFIGURATION_MIME_TYPE)
     dialog.add_filter(ovpn_filter)
     text_filter = Gtk.FileFilter()
     text_filter.set_name('Text Files')
@@ -151,6 +151,5 @@ def construct_configuration_remove_dialog(name, on_remove=None, on_cancel=None):
     default = dialog.get_widget_for_response(response_id=Gtk.ResponseType.OK)
     default.set_can_default(True)
     default.grab_default()
-    dialog.show_all()
     dialog.show_all()
     return dialog
