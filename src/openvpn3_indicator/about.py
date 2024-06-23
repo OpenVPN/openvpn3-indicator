@@ -30,9 +30,12 @@ APPLICATION_AUTHORS = [
     ]
 APPLICATION_URL = 'https://github.com/OpenVPN/openvpn3-indicator'
 APPLICATION_VERSION = '0.1'
+BACKEND_VERSION_MINIMUM = 20
+BACKEND_VERSION_RECOMMENDED = 21
 APPLICATION_DESCRIPTION_SHORT = 'Simple indicator application for OpenVPN3'
 APPLICATION_DESCRIPTION_LONG = '''
 This is a simple indicator application that controls OpenVPN3 tunnels.
 It is based on D-Bus interface provided by OpenVPN3 Linux client.
 It is a temporary solution until Network Manager supports OpenVPN3.
 '''.strip()
+CONFIGURATION_MIME_TYPE = 'application/x-openvpn-profile'
