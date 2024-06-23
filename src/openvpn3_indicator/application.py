@@ -22,6 +22,7 @@
 
 import gettext
 import logging
+import re
 import time
 import traceback
 
@@ -41,6 +42,7 @@ import webbrowser
 import openvpn3
 
 from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLICATION_NAME, APPLICATION_TITLE, APPLICATION_SYSTEM_TAG
+from openvpn3_indicator.about import MANAGER_VERSION_MINIMUM, MANAGER_VERSION_RECOMMENDED
 from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
 from openvpn3_indicator.credential_store import CredentialStore
@@ -109,6 +111,10 @@ class Application(Gtk.Application):
     def on_startup(self, data):
         logging.info(f'Startup')
         DBusGMainLoop(set_as_default=True)
+
+        self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
+        self.notifiers = dict()
+
         self.dbus = dbus.SystemBus()
         self.config_manager = openvpn3.ConfigurationManager(self.dbus)
         self.session_manager = openvpn3.SessionManager(self.dbus)
@@ -120,15 +126,24 @@ class Application(Gtk.Application):
         self.manager_version = 0
         cmgr_obj = self.dbus.get_object('net.openvpn.v3.configuration','/net/openvpn/v3/configuration')
         cmgr_prop = dbus.Interface(cmgr_obj, dbus_interface='org.freedesktop.DBus.Properties')
-        cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
-        if cmgr_version.startswith('git:'):
-            # development version: presume all features are available
-            # and use a high version number
-            self.manager_version = 9999
-        elif cmgr_version.startswith('v'):
-            # Version identifiers may cary a "release label",
-            # like v19_beta, v22_dev
-            self.manager_version = int(cmgr_version[1:].split('_')[0])
+        self.manager_version = 9999
+        try:
+            cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
+            if cmgr_version.startswith('git:'):
+                # development version: presume all features are available
+                # and use a high version number
+                pass
+            elif cmgr_version.startswith('v'):
+                # Version identifiers may cary a "release label",
+                # like v19_beta, v22_dev
+                self.manager_version = int(re.split(r'[^0-9]', cmgr_version[1:], 1)[0])
+        except:
+            logging.debug(traceback.format_exc())
+            logging.warning(f'Backend version check failed')
+        if self.manager_version < MANAGER_VERSION_MINIMUM:
+            self.error(f'You are using version {self.manager_version} of OpenVPN3 software which is not supported. Consider an upgrade to a newer version. We recommend version {MANAGER_VERSION_RECOMMENDED}.', notify=True)
+        elif self.manager_version < MANAGER_VERSION_RECOMMENDED:
+            self.warning(f'You are using version {self.manager_version} of OpenVPN3 software. Consider an upgrade to a newer version. We recommend version {MANAGER_VERSION_RECOMMENDED}.', notify=True)
         logging.debug(f'Running with manager version {self.manager_version}')
 
         self.credential_store = CredentialStore()
@@ -152,9 +167,6 @@ class Application(Gtk.Application):
         self.default_indicator.order_key='0'
         self.default_indicator.active=True
         self.indicators = dict()
-        
-        self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
-        self.notifiers = dict()
 
         self.last_invalid = time.monotonic()
         self.invalid_sessions = True
@@ -162,15 +174,6 @@ class Application(Gtk.Application):
 
         GLib.timeout_add(1000, self.on_schedule)
         self.hold()
-
-        self.multi_notifier.new_notifier(
-            identifier = 'startup',
-            title = f'{APPLICATION_TITLE}',
-            body = 'Started',
-            icon = f'{APPLICATION_NAME}',
-            active = True,
-            timespan = 2,
-        )
 
     def refresh_ui(self):
         if self.invalid_ui:
@@ -761,3 +764,36 @@ class Application(Gtk.Application):
     def action_quit(self, _object):
         logging.info(f'Quit')
         self.release()
+
+    def logging_notify(self, msg, title=f'{APPLICATION_NAME}', icon='active'):
+        icon = f'{APPLICATION_NAME}-{icon}'
+        self.multi_notifier.new_notifier(
+            identifier = 'logging',
+            title = title,
+            body = msg,
+            icon = icon,
+            active = True,
+            timespan = 2,
+        )
+        self.multi_notifier.update()
+
+    def debug(self, msg, notify=False, *args, **kwargs):
+        logging.debug(msg, *args, **kwargs)
+        if notify:
+            self.logging_notify(msg)
+
+    def info(self, msg, notify=False, *args, **kwargs):
+        logging.info(msg, *args, **kwargs)
+        if notify:
+            self.logging_notify(msg)
+
+    def warning(self, msg, notify=False, *args, **kwargs):
+        logging.warning(msg, *args, **kwargs)
+        if notify:
+            self.logging_notify(msg, icon='active-error')
+
+    def error(self, msg, notify=False, *args, **kwargs):
+        logging.error(msg, *args, **kwargs)
+        if notify:
+            self.logging_notify(msg, icon='active-error')
+
