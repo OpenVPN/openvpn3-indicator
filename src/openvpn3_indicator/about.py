@@ -30,8 +30,8 @@ APPLICATION_AUTHORS = [
     ]
 APPLICATION_URL = 'https://github.com/OpenVPN/openvpn3-indicator'
 APPLICATION_VERSION = '0.1'
-BACKEND_VERSION_MINIMUM = 20
-BACKEND_VERSION_RECOMMENDED = 21
+MANAGER_VERSION_MINIMUM = 20
+MANAGER_VERSION_RECOMMENDED = 21
 APPLICATION_DESCRIPTION_SHORT = 'Simple indicator application for OpenVPN3'
 APPLICATION_DESCRIPTION_LONG = '''
 This is a simple indicator application that controls OpenVPN3 tunnels.
