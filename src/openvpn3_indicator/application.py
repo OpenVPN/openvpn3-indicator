@@ -126,9 +126,16 @@ class Application(Gtk.Application):
         self.manager_version = 0
         cmgr_obj = self.dbus.get_object('net.openvpn.v3.configuration','/net/openvpn/v3/configuration')
         cmgr_prop = dbus.Interface(cmgr_obj, dbus_interface='org.freedesktop.DBus.Properties')
+        cmgr_peer = dbus.Interface(cmgr_obj, dbus_interface='org.freedesktop.DBus.Peer')
         self.manager_version = 9999
         try:
-            cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
+            cmgr_peer.Ping()
+            try:
+                cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
+            except dbus.exceptions.DBusException:
+                logging.debug(f'Waiting for backend to start')
+                time.sleep(0.5)
+                cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
             if cmgr_version.startswith('git:'):
                 # development version: presume all features are available
                 # and use a high version number
@@ -734,7 +741,7 @@ class Application(Gtk.Application):
     def on_config_import(self, name, path):
         logging.info(f'Import Config {name} {path}')
         try:
-            parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', path], '')
+            parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', path], APPLICATION_TITLE)
             config_description = parser.GenerateConfig()
             import_args = dict()
             if self.manager_version > 20:
