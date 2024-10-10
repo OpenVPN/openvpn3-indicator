@@ -422,6 +422,8 @@ class Application(Gtk.Application):
             return f'{APPLICATION_NAME}-idle'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
             return f'{APPLICATION_NAME}-loading'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_PAUSED == minor:
+            return f'{APPLICATION_NAME}-paused'
         return f'{APPLICATION_NAME}-active'
 
     def session_description(self, session_id):
@@ -448,6 +450,8 @@ class Application(Gtk.Application):
             return f'Disconnected'
         if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
             return f'Authentication required'
+        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_PAUSED == minor:
+            return f'Paused'
         return f'Connected'
 
     def notify_session_change(self, session_id):
