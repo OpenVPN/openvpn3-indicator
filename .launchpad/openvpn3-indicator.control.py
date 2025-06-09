@@ -29,13 +29,12 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--scriptdir', default=os.getcwd())
 parser.add_argument('--outdir', default=os.getcwd())
-parser.add_argument('--distro', default='jammy')
 args = parser.parse_args()
 scriptdir=pathlib.Path(args.scriptdir)
 outdir=pathlib.Path(args.outdir)
 gitdir=scriptdir.parent
 
-DISTROS = ['focal','jammy','noble','oracular','plucky']
+DISTROS = ['focal','jammy','noble','oracular','plucky','questing']
 
 
 os.environ['TZ'] = 'UTC'
@@ -75,7 +74,6 @@ It should be considered as a temporary work-around until Network Manager impleme
 '''
     LICENSE   = 'AGPL-3.0'
     URL       = 'https://github.com/OpenVPN/openvpn3-indicator'
-    BUILDARCH = 'noarch'
     COMPAT = '10'
     BUILDREQUIRES = [
             f'debhelper (>= {COMPAT})',
@@ -105,57 +103,6 @@ It should be considered as a temporary work-around until Network Manager impleme
     SOURCECODE = outdir / f'openvpn3-indicator_{VERSION}.orig.tar.gz'
     SOURCECODE.parent.mkdir(parents=True, exist_ok=True)
     source_run = subprocess.run(['tar', '--create', '--auto-compress', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|', '--directory', str(gitdir) ] + SOURCES)
-
-    PREP = '\n'.join([
-            '%setup'
-        ])
-
-    BUILD = '\n'.join([
-            'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} HARDCODE_PYTHON=/usr/bin/python3 all',
-        ] + [
-            'desktop-file-validate %(buildroot}%{_datadir}'+path for path in APPS
-        ])
-
-    INSTALL = '\n'.join([
-            'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} package',
-        ])
-
-    POST = '\n'.join([
-            'touch --no-create %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
-        ] + [
-            'xdg-mime install --mode system %{_datadir}/'+mime for mime in MIMES
-        ])
-
-    POSTTRANS = '\n'.join([
-            'update-desktop-database %{_datadir}/applications || :',
-            'update-mime-database %{_datadir}/mime || :',
-        ] + [
-            'gtk-update-icon-cache --silent %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
-        ])
-
-    PREUN = '\n'.join([
-            'xdg-mime uninstall --mode system %{_datadir}/'+mime for mime in MIMES
-        ])
-
-    POSTUN = '\n'.join([
-            'update-desktop-database %{_datadir}/applications || :',
-            'update-mime-database %{_datadir}/mime || :'
-        ] + [
-            'touch --no-create %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
-        ] + [
-            'gtk-update-icon-cache --silent %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
-        ])
-
-    FILES = '\n'.join([
-            '%license LICENSE',
-            '%doc README.md',
-            '%{_bindir}/%{name}',
-            '/etc/xdg/autostart/%{name}.desktop'
-        ] + [
-            '%{_datadir}/'+path for path in APPS + ICONS + MIMES
-        ] + [
-            '%{_datadir}/'+path+'.gz' for path in MANS
-        ])
 
     NEWLINE='\n'
 
@@ -192,10 +139,10 @@ f'''#!/usr/bin/make -f
 clean:
 
 build:
-    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share all
+    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 all
 
 binary:
-    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share package
+    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 package
     dh_gencontrol
     dh_builddeb
 '''))
