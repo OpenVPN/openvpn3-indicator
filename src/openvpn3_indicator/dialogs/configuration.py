@@ -69,9 +69,12 @@ def construct_configuration_select_dialog(name=None, on_import=None, on_cancel=N
     dialog.show_all()
     return dialog
 
+def guess_configuration_name(path):
+    #TODO: Try to guess the name from path contents
+    pass
 
 def construct_configuration_import_dialog(path, name=None, on_import=None, on_cancel=None):
-    name = name or DEFAULT_CONFIG_NAME
+    name = name or guess_configuration_name(path) or DEFAULT_CONFIG_NAME
     dialog = Gtk.Dialog('OpenVPN Configuration Import')
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)
@@ -105,6 +108,10 @@ def construct_configuration_import_dialog(path, name=None, on_import=None, on_ca
             dialog.disconnect_by_func(on_dialog_destroy)
             if on_import is not None:
                 name = entry.get_text()
+                #TODO: Warn the user if config name is already used.
+                #TODO: Shall we allow to have two configs with the same name?
+                #TODO: Is it possible to overwrite previous config and keep id?
+                #TODO: Or is it better to remove the old one, and create new with the same name?
                 on_import(name=name, path=path)
         dialog.destroy()
 

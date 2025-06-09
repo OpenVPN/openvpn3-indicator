@@ -23,6 +23,7 @@
 import gettext
 import logging
 import re
+import sys
 import time
 import traceback
 
@@ -39,16 +40,24 @@ except (ValueError, ImportError):
     from gi.repository import AppIndicator3
 import webbrowser
 
-import openvpn3
-
 from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLICATION_NAME, APPLICATION_TITLE, APPLICATION_SYSTEM_TAG
 from openvpn3_indicator.about import MANAGER_VERSION_MINIMUM, MANAGER_VERSION_RECOMMENDED
 from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
 from openvpn3_indicator.credential_store import CredentialStore
 from openvpn3_indicator.dialogs.about import construct_about_dialog
+from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog, construct_openvpn_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
+
+try:
+    import openvpn3
+except:
+    logging.critical('OpenVPN Indicator requires OpenVPN3 python library to run. Please install OpenVPN3.')
+    dialog = construct_openvpn_missing_dialog()
+    dialog.set_visible(True)
+    dialog.run()
+    sys.exit(1)
 
 #TODO: Which input slots should not be stored ? (OTPs, etc.)
 #TODO: Understand better the possible session state changes
@@ -111,6 +120,17 @@ class Application(Gtk.Application):
     def on_startup(self, data):
         logging.info(f'Startup')
         DBusGMainLoop(set_as_default=True)
+
+        bus = dbus.Bus()
+        try:
+            bus.get_name_owner('org.kde.StatusNotifierWatcher')
+        except dbus.exceptions.DBusException:
+            logging.critical('OpenVPN Indicator requires AppIndicator to run. Please install AppIndicator plugin for your desktop.')
+            dialog = construct_appindicator_missing_dialog()
+            dialog.set_visible(True)
+            dialog.run()
+            sys.exit(1)
+
 
         self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
         self.notifiers = dict()
