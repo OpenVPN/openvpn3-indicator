@@ -35,7 +35,7 @@ scriptdir=pathlib.Path(args.scriptdir)
 outdir=pathlib.Path(args.outdir)
 gitdir=scriptdir.parent
 
-DISTROS = ['focal','jammy','noble','oracular']
+DISTROS = ['focal','jammy','noble','oracular','plucky']
 
 
 os.environ['TZ'] = 'UTC'
@@ -111,7 +111,7 @@ It should be considered as a temporary work-around until Network Manager impleme
         ])
 
     BUILD = '\n'.join([
-            'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} all',
+            'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} HARDCODE_PYTHON=/usr/bin/python3 all',
         ] + [
             'desktop-file-validate %(buildroot}%{_datadir}'+path for path in APPS
         ])

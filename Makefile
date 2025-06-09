@@ -47,7 +47,7 @@ default:
 	@echo "Use  ***  make devel  ***  to install symlinks to $(PROGRAM) in the current folder for the current user only."
 	@echo "This is the way for developers."
 	@echo
-	@echo "Use  ***  sudo make uninstall  ***  or  ***  make indevel  ***  to uninstall $(PROGRAM)."
+	@echo "Use  ***  sudo make uninstall  ***  or  ***  make undevel  ***  to uninstall $(PROGRAM)."
 	@echo
 	@echo "Program version is $(VERSION)"
 	@echo
@@ -57,7 +57,11 @@ all: $(PROGRAM)
 
 
 $(PROGRAM): $(PREPARE_SOURCES) $(PREPARE_ABOUT) Makefile scripts/build_executable
+ifeq ($(HARDCODE_PYTHON),)
 	scripts/build_executable --directory $(PREPAREDIR) --executable $@
+else
+	scripts/build_executable --directory $(PREPAREDIR) --executable $@ --python $(HARDCODE_PYTHON)
+endif
 
 $(PREPARE_SOURCES): $(PREPAREDIR)/% : src/%
 	@install --directory $(dir $@)

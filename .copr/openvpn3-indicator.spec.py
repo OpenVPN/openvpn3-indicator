@@ -100,7 +100,7 @@ PREP = '\n'.join([
     ])
 
 BUILD = '\n'.join([
-        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} all',
+        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} HARDCODE_PYTHON=/usr/bin/python3 all',
     ])
 
 INSTALL = '\n'.join([
