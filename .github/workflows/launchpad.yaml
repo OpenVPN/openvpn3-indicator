@@ -11,7 +11,7 @@ jobs:
     - name: Prepare
       run: |
         sudo apt-get update
-        sudo apt-get -f -y install make devscripts dput dpkg-dev debhelper desktop-file-utils
+        sudo apt-get -f -y install make devscripts dput dpkg-dev debhelper desktop-file-utils build-essential
     - name: Install GPG Key
       env:
         KEY: ${{ secrets.GPG_LAUNCHPAD_KEY }}
