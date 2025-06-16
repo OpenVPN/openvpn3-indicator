@@ -122,15 +122,21 @@ class Application(Gtk.Application):
         DBusGMainLoop(set_as_default=True)
 
         bus = dbus.Bus()
-        try:
-            bus.get_name_owner('org.kde.StatusNotifierWatcher')
-        except dbus.exceptions.DBusException:
-            logging.critical('OpenVPN Indicator requires AppIndicator to run. Please install AppIndicator plugin for your desktop.')
-            dialog = construct_appindicator_missing_dialog()
-            dialog.set_visible(True)
-            dialog.run()
-            sys.exit(1)
-
+        notifier_fail_count = 0
+        while True:
+            try:
+                bus.get_name_owner('org.kde.StatusNotifierWatcher')
+                break
+            except dbus.exceptions.DBusException:
+                notifier_fail_count += 1
+                if notifier_fail_count > 20:
+                    logging.critical('OpenVPN Indicator requires AppIndicator to run. Please install AppIndicator plugin for your desktop.')
+                    dialog = construct_appindicator_missing_dialog()
+                    dialog.set_visible(True)
+                    dialog.run()
+                    sys.exit(1)
+                else:
+                    time.sleep(0.5)
 
         self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
         self.notifiers = dict()
