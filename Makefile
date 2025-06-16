@@ -49,6 +49,8 @@ default:
 	@echo
 	@echo "Use  ***  sudo make uninstall  ***  or  ***  make undevel  ***  to uninstall $(PROGRAM)."
 	@echo
+	@echo "Use  ***  make DESTDIR=debian/openvpn3-indicator BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 package  ***  to build for packaging."
+	@echo
 	@echo "Program version is $(VERSION)"
 	@echo
 
