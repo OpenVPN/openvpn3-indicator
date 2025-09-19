@@ -22,6 +22,7 @@
 
 import gettext
 import logging
+import pathlib
 import re
 import sys
 import time
@@ -771,13 +772,21 @@ class Application(Gtk.Application):
     def on_config_import(self, name, path):
         logging.info(f'Import Config {name} {path}')
         try:
-            parser = openvpn3.ConfigParser(['openvpn3-indicator-config-parser', '--config', path], APPLICATION_TITLE)
-            config_description = parser.GenerateConfig()
+            config_description = pathlib.Path(path).read_text()
             import_args = dict()
             if self.manager_version > 20:
                 # system_tag arrived in openvpn3-linux v21
                 import_args['system_tag'] = APPLICATION_SYSTEM_TAG
-            self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            config_obj = self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            if self.manager_version >= 22:
+                try:
+                    v = config_obj.Validate()
+                except dbus.exceptions.DBusException as excp:
+                    msg = excp.get_dbus_message()
+                    msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
+                    self.error(f'OpenVPN Config {name} imported from {path} failed validation: {msg}', notify=True)
+                    logging.info(f'Removing Config {name}')
+                    config_obj.Remove()
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
@@ -832,5 +841,6 @@ class Application(Gtk.Application):
     def error(self, msg, notify=False, *args, **kwargs):
         logging.error(msg, *args, **kwargs)
         if notify:
+            #TODO: Some errors should be displayed even when user has silenced notifications
             self.logging_notify(msg, icon='active-error')
 
