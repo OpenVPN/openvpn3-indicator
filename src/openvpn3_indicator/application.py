@@ -790,7 +790,7 @@ class Application(Gtk.Application):
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
-            logging.error(f'Failed to import configuration {name} from {path}')
+            self.error(f'Failed to import configuration {name} from {path}', notify=True)
 
     def action_config_import(self, _object):
         logging.info(f'Import Config')
@@ -843,4 +843,3 @@ class Application(Gtk.Application):
         if notify:
             #TODO: Some errors should be displayed even when user has silenced notifications
             self.logging_notify(msg, icon='active-error')
-
