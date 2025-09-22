@@ -50,6 +50,7 @@ from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog, construct_openvpn_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
+from openvpn3_indicator.dialogs.notification import show_error_dialog
 
 try:
     import openvpn3
@@ -784,13 +785,19 @@ class Application(Gtk.Application):
                 except dbus.exceptions.DBusException as excp:
                     msg = excp.get_dbus_message()
                     msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
-                    self.error(f'OpenVPN Config {name} imported from {path} failed validation: {msg}', notify=True)
+                    show_error_dialog(
+                        title="Configuration Import Failed",
+                        message=f"OpenVPN Config {name} imported from {path} failed validation",
+                    )
                     logging.info(f'Removing Config {name}')
                     config_obj.Remove()
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
-            self.error(f'Failed to import configuration {name} from {path}', notify=True)
+            show_error_dialog(
+                title="Configuration Import Failed",
+                message=f"Failed to import configuration {name} from {path}",
+            )
 
     def action_config_import(self, _object):
         logging.info(f'Import Config')
