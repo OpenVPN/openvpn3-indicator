@@ -786,7 +786,7 @@ class Application(Gtk.Application):
                     msg = excp.get_dbus_message()
                     msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
                     self.error(
-                        msg=f"OpenVPN Config {name} imported from {path} failed validation",
+                        msg=f"OpenVPN Config {name} imported from {path} failed validation: {msg}",
                         notify=False,
                         dialog=True,
                         title="Configuration Import Failed"
