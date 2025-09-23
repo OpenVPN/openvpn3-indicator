@@ -50,7 +50,7 @@ from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog, construct_openvpn_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
-from openvpn3_indicator.dialogs.notification import show_error_dialog
+from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
 
 try:
     import openvpn3
@@ -785,18 +785,22 @@ class Application(Gtk.Application):
                 except dbus.exceptions.DBusException as excp:
                     msg = excp.get_dbus_message()
                     msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
-                    show_error_dialog(
-                        title="Configuration Import Failed",
-                        message=f"OpenVPN Config {name} imported from {path} failed validation",
+                    self.error(
+                        msg=f"OpenVPN Config {name} imported from {path} failed validation",
+                        notify=False,
+                        dialog=True,
+                        title="Configuration Import Failed"
                     )
                     logging.info(f'Removing Config {name}')
                     config_obj.Remove()
             self.invalid_sessions = True
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
-            show_error_dialog(
-                title="Configuration Import Failed",
-                message=f"Failed to import configuration {name} from {path}",
+            self.error(
+                msg=f"Failed to import configuration {name} from {path}",
+                notify=False,
+                dialog=True,
+                title="Configuration Import Failed"
             )
 
     def action_config_import(self, _object):
@@ -835,18 +839,26 @@ class Application(Gtk.Application):
         if notify:
             self.logging_notify(msg)
 
-    def info(self, msg, notify=False, *args, **kwargs):
+    def info(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.info(msg, *args, **kwargs)
         if notify:
             self.logging_notify(msg)
 
-    def warning(self, msg, notify=False, *args, **kwargs):
+        if dialog:
+            show_info_notification(title=title, message=msg)
+
+    def warning(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.warning(msg, *args, **kwargs)
         if notify:
             self.logging_notify(msg, icon='active-error')
 
-    def error(self, msg, notify=False, *args, **kwargs):
+        if dialog:
+            show_warning_notification(title=title, message=msg)
+
+    def error(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.error(msg, *args, **kwargs)
         if notify:
-            #TODO: Some errors should be displayed even when user has silenced notifications
-            self.logging_notify(msg, icon='active-error')
+            self.logging_notify(msg, icon="active-error")
+
+        if dialog:
+            show_error_dialog(title=title, message=msg)
