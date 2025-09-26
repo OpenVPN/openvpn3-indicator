@@ -773,12 +773,64 @@ class Application(Gtk.Application):
     def on_config_import(self, name, path):
         logging.info(f'Import Config {name} {path}')
         try:
-            config_description = pathlib.Path(path).read_text()
-            import_args = dict()
-            if self.manager_version > 20:
-                # system_tag arrived in openvpn3-linux v21
-                import_args['system_tag'] = APPLICATION_SYSTEM_TAG
-            config_obj = self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            try:
+                config_description = pathlib.Path(path).read_text()
+            except FileNotFoundError:
+                self.error(
+                    msg=f"Configuration file not found: {path}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except PermissionError:
+                self.error(
+                    msg=f"Permission denied accessing file: {path}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except UnicodeDecodeError:
+                self.error(
+                    msg=f"File encoding error: {path}\nUnable to read file as text. Please check if this is a valid OpenVPN configuration file.",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except OSError as e:
+                self.error(
+                    msg=f"Error reading file: {path}\n{str(e)}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            try:
+                import_args = dict()
+                if self.manager_version > 20:
+                    # system_tag arrived in openvpn3-linux v21
+                    import_args['system_tag'] = APPLICATION_SYSTEM_TAG
+                config_obj = self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            except dbus.exceptions.DBusException as excp:
+                msg = excp.get_dbus_message()
+                msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
+                self.error(
+                    msg=f"Failed to import configuration {name}:\n{msg}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except Exception as e:
+                self.error(
+                    msg=f"Unexpected error during configuration import:\n{str(e)}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
             if self.manager_version >= 22:
                 try:
                     v = config_obj.Validate()
@@ -786,18 +838,21 @@ class Application(Gtk.Application):
                     msg = excp.get_dbus_message()
                     msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
                     self.error(
-                        msg=f"OpenVPN Config {name} imported from {path} failed validation: {msg}",
+                        msg=f"OpenVPN Config {name} imported from {path} failed validation:\n{msg}",
                         notify=False,
                         dialog=True,
                         title="Configuration Import Failed"
                     )
                     logging.info(f'Removing Config {name}')
                     config_obj.Remove()
+                    return
+
             self.invalid_sessions = True
-        except: #TODO: Catch only expected exceptions
+            self.info(msg=f'Successfully imported config {name} from {path}', notify=True)
+        except:
             logging.debug(traceback.format_exc())
             self.error(
-                msg=f"Failed to import configuration {name} from {path}",
+                msg=f"Unexpected error importing configuration {name} from {path}",
                 notify=False,
                 dialog=True,
                 title="Configuration Import Failed"
