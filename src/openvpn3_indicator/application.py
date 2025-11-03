@@ -50,6 +50,7 @@ from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog, construct_openvpn_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
+from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
 
 try:
     import openvpn3
@@ -822,25 +823,90 @@ class Application(Gtk.Application):
     def on_config_import(self, name, path):
         logging.info(f'Import Config {name} {path}')
         try:
-            config_description = pathlib.Path(path).read_text()
-            import_args = dict()
-            if self.manager_version > 20:
-                # system_tag arrived in openvpn3-linux v21
-                import_args['system_tag'] = APPLICATION_SYSTEM_TAG
-            config_obj = self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            try:
+                config_description = pathlib.Path(path).read_text()
+            except FileNotFoundError:
+                self.error(
+                    msg=f"Configuration file not found: {path}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except PermissionError:
+                self.error(
+                    msg=f"Permission denied accessing file: {path}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except UnicodeDecodeError:
+                self.error(
+                    msg=f"File encoding error: {path}\nUnable to read file as text. Please check if this is a valid OpenVPN configuration file.",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except OSError as e:
+                self.error(
+                    msg=f"Error reading file: {path}\n{str(e)}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            try:
+                import_args = dict()
+                if self.manager_version > 20:
+                    # system_tag arrived in openvpn3-linux v21
+                    import_args['system_tag'] = APPLICATION_SYSTEM_TAG
+                config_obj = self.config_manager.Import(name, config_description, single_use=False, persistent=True, **import_args)
+            except dbus.exceptions.DBusException as excp:
+                msg = excp.get_dbus_message()
+                msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
+                self.error(
+                    msg=f"Failed to import configuration {name}:\n{msg}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
+            except Exception as e:
+                self.error(
+                    msg=f"Unexpected error during configuration import:\n{str(e)}",
+                    notify=False,
+                    dialog=True,
+                    title="Configuration Import Failed"
+                )
+                return
             if self.manager_version >= 22:
                 try:
                     v = config_obj.Validate()
                 except dbus.exceptions.DBusException as excp:
                     msg = excp.get_dbus_message()
                     msg = re.sub(r'^.*GDBus.Error:[^\s]*', '', msg).strip()
-                    self.error(f'OpenVPN Config {name} imported from {path} failed validation: {msg}', notify=True)
+                    self.error(
+                        msg=f"OpenVPN Config {name} imported from {path} failed validation:\n{msg}",
+                        notify=False,
+                        dialog=True,
+                        title="Configuration Import Failed"
+                    )
                     logging.info(f'Removing Config {name}')
                     config_obj.Remove()
+                    return
+
             self.invalid_sessions = True
-        except: #TODO: Catch only expected exceptions
+            self.info(msg=f'Successfully imported config {name} from {path}', notify=True)
+        except:
             logging.debug(traceback.format_exc())
-            self.error(f'Failed to import configuration {name} from {path}', notify=True)
+            self.error(
+                msg=f"Unexpected error importing configuration {name} from {path}",
+                notify=False,
+                dialog=True,
+                title="Configuration Import Failed"
+            )
 
     def action_config_import(self, _object):
         logging.info(f'Import Config')
@@ -878,18 +944,26 @@ class Application(Gtk.Application):
         if notify:
             self.logging_notify(msg)
 
-    def info(self, msg, notify=False, *args, **kwargs):
+    def info(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.info(msg, *args, **kwargs)
         if notify:
             self.logging_notify(msg)
 
-    def warning(self, msg, notify=False, *args, **kwargs):
+        if dialog:
+            show_info_notification(title=title, message=msg)
+
+    def warning(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.warning(msg, *args, **kwargs)
         if notify:
             self.logging_notify(msg, icon='active-error')
 
-    def error(self, msg, notify=False, *args, **kwargs):
+        if dialog:
+            show_warning_notification(title=title, message=msg)
+
+    def error(self, msg, notify=False, dialog=False, title=None, *args, **kwargs):
         logging.error(msg, *args, **kwargs)
         if notify:
-            #TODO: Some errors should be displayed even when user has silenced notifications
-            self.logging_notify(msg, icon='active-error')
+            self.logging_notify(msg, icon="active-error")
+
+        if dialog:
+            show_error_dialog(title=title, message=msg)
