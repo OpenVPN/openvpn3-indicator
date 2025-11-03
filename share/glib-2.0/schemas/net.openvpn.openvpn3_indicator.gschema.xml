@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="openvpn3-indicator">
+    <schema id='net.openvpn.openvpn3_indicator' path='/net/openvpn/openvpn3_indicator/'>
+        <key type='s' name='startup-action'>
+            <summary>Startup action</summary>
+            <description>
+                Set the startup action.
+                Set to empty value to take no action on startup.
+                Set to "RESTART" to start the most recently started configuration on startup.
+                Set to "STARTID:{id}" to start a configuration with specific id on startup.
+                Set to "STARTNAME:{name}" to start a configuration with specific name on startup.
+            </description>
+            <default>''</default>
+        </key>
+        <key type='s' name='most-recent-configuration-id'>
+            <summary>Id of the most recently started configuration.</summary>
+            <description>
+                Id of the most recently started configuration.
+            </description>
+            <default>''</default>
+        </key>
+    </schema>
+</schemalist>

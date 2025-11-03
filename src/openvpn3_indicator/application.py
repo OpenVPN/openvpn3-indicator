@@ -85,6 +85,7 @@ class Application(Gtk.Application):
             application_id=APPLICATION_ID,
             flags=Gio.ApplicationFlags.HANDLES_OPEN,
             )
+        self.settings = Gio.Settings.new(APPLICATION_ID)
         self.add_main_option('version', ord('V'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show version and exit", None)
         self.add_main_option('verbose', ord('v'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show more info", None)
         self.add_main_option('debug', ord('d'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show debug info", None)
@@ -205,6 +206,24 @@ class Application(Gtk.Application):
         self.last_invalid = time.monotonic()
         self.invalid_sessions = True
         self.invalid_ui = True
+
+        self.startup_config_id = None
+        self.startup_config_name = None
+        try:
+            startup_action = self.settings.get_string('startup-action')
+            self.debug(f'Startup action: {startup_action}')
+            if startup_action == 'RESTART':
+                self.startup_config_id = self.settings.get_string('most-recent-configuration-id')
+            start_id = re.match(r'STARTID:(?P<id>.*)', startup_action)
+            if start_id:
+                self.startup_config_id = start_id.group('id')
+            start_name = re.match(r'STARTNAME:(?P<name>.*)', startup_action)
+            if start_name:
+                self.startup_config_name = start_name.group('name')
+        except:
+            pass
+        if self.startup_config_id or self.startup_config_name:
+            self.info(f'Startup configuration set to {self.startup_config_id or self.startup_config_name}')
 
         GLib.timeout_add(1000, self.on_schedule)
         self.hold()
@@ -329,6 +348,23 @@ class Application(Gtk.Application):
     def get_session_name(self, session_id):
         return self.get_config_name(self.session_configs.get(session_id, ''))
 
+    def action_settings_startup(self, _object, value):
+        self.settings.set_string('startup-action', value)
+
+    def construct_menu_settings_startup(self):
+        menu = Gtk.Menu()
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('No Connection'))
+        menu_item.connect('activate', self.action_settings_startup, '')
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Restart Connection'))
+        menu_item.connect('activate', self.action_settings_startup, 'RESTART')
+        menu.append(menu_item)
+        for config_name, config_id in sorted(self.name_configs.items()):
+            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Start {name}').format(name=config_name))
+            menu_item.connect('activate', self.action_settings_startup, f'STARTNAME:{config_name}')
+            menu.append(menu_item)
+        return menu
+
     def construct_menu_config(self, config_id):
         menu = Gtk.Menu()
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Connect'))
@@ -385,6 +421,9 @@ class Application(Gtk.Application):
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
         menu_item.connect('activate', self.action_config_import)
         menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Startup Settings'))
+        menu_item.set_submenu(self.construct_menu_settings_startup())
+        menu.append(menu_item)
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
         menu_item.connect('activate', self.action_about)
         menu.append(menu_item)
@@ -415,6 +454,9 @@ class Application(Gtk.Application):
             menu.append(Gtk.SeparatorMenuItem())
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
         menu_item.connect('activate', self.action_config_import)
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Startup Settings'))
+        menu_item.set_submenu(self.construct_menu_settings_startup())
         menu.append(menu_item)
         menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
         menu_item.connect('activate', self.action_about)
@@ -691,6 +733,13 @@ class Application(Gtk.Application):
         if self.invalid_ui:
             self.refresh_ui()
         self.multi_notifier.update()
+        if self.startup_config_id or self.startup_config_name:
+            config_id = self.startup_config_id or self.name_configs.get(self.startup_config_name, None)
+            if config_id and len(self.config_sessions[config_id]) == 0:
+                self.debug(f'Starting config {config_id} as requested in startup settings.')
+                self.action_config_connect(None, config_id)
+            self.startup_config_id = None
+            self.startup_config_name = None
         GLib.timeout_add(1000, self.on_schedule)
 
     def action_config_connect(self, _object, config_id):
@@ -699,6 +748,7 @@ class Application(Gtk.Application):
             return
         try:
             session = self.session_manager.NewTunnel(self.configs[config_id])
+            self.settings.set_string('most-recent-configuration-id', config_id)
         except: #TODO: Catch only expected exceptions
             logging.debug(traceback.format_exc())
             pass

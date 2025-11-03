@@ -82,6 +82,7 @@ package: $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INST
 install: package
 	update-desktop-database $(DESTDIR)$(DATADIR)/applications
 	update-mime-database $(DESTDIR)$(DATADIR)/mime
+	glib-compile-schemas $(DESTDIR)$(DATADIR)/glib-2.0/schemas
 	gtk-update-icon-cache -f -t $(DESTDIR)$(DATADIR)/icons/*
 
 $(DESTDIR)$(BINDIR)/$(PROGRAM) : $(PROGRAM)
@@ -111,12 +112,14 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATION) $(INSTALL_AUTOSTART)
 	update-desktop-database $(DESTDIR)$(DATADIR)/applications
 	update-mime-database $(DESTDIR)$(DATADIR)/mime
+	glib-compile-schemas $(DESTDIR)$(DATADIR)/glib-2.0/schemas
 	gtk-update-icon-cache -f -t $(DESTDIR)$(DATADIR)/icons/*
 
 .PHONY: devel
 devel: $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATION) $(DEVEL_AUTOSTART)
 	update-desktop-database $(HOME)/.local/share/applications
 	update-mime-database $(HOME)/.local/share/mime
+	glib-compile-schemas $(HOME)/.local/share/glib-2.0/schemas
 	gtk-update-icon-cache -f -t $(HOME)/.local/share/icons/*
 
 $(HOME)/.local/bin/$(PROGRAM) : src/__main__.py
@@ -141,6 +144,7 @@ undevel:
 	rm -f $(HOME)/.local/bin/$(PROGRAM) $(DEVEL_SHARES) $(DEVEL_APPLICATION) $(DEVEL_AUTOSTART)
 	update-desktop-database $(HOME)/.local/share/applications
 	update-mime-database $(HOME)/.local/share/mime
+	glib-compile-schemas $(HOME)/.local/share/glib-2.0/schemas
 	gtk-update-icon-cache -f -t $(HOME)/.local/share/icons/*
 
 .PHONY: spellcheck

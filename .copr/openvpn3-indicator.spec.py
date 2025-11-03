@@ -51,6 +51,9 @@ ICONS = [ str(p.relative_to(icon_path.parent)) for p in icon_path.glob('**/*.svg
 mime_path = gitdir / 'share' / 'mime'
 MIMES = [ str(p.relative_to(mime_path.parent)) for p in mime_path.glob('**/*.xml') if p.is_file() ]
 
+schema_path = gitdir / 'share' / 'glib-2.0' / 'schemas'
+SCHEMAS = [ str(p.relative_to(schema_path.parent.parent)) for p in schema_path.glob('**/*.gschema.xml') if p.is_file() ]
+
 app_path = gitdir / 'share' / 'applications'
 APPS = [ str(p.relative_to(app_path.parent)) for p in app_path.glob('**/*.desktop') if p.is_file() ]
 
@@ -118,6 +121,7 @@ POST = '\n'.join([
 POSTTRANS = '\n'.join([
         'update-desktop-database %{_datadir}/applications || :',
         'update-mime-database %{_datadir}/mime || :',
+        'glib-compile-schemas %{_datadir}/glib-2.0/schemas || :',
     ] + [
         'gtk-update-icon-cache --silent %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
     ])
@@ -128,7 +132,8 @@ PREUN = '\n'.join([
 
 POSTUN = '\n'.join([
         'update-desktop-database %{_datadir}/applications || :',
-        'update-mime-database %{_datadir}/mime || :'
+        'update-mime-database %{_datadir}/mime || :',
+        'glib-compile-schemas %{_datadir}/glib-2.0/schemas || :',
     ] + [
         'touch --no-create %{_datadir}/icons/'+theme+' || :' for theme in ICON_THEMES
     ] + [
@@ -141,7 +146,7 @@ FILES = '\n'.join([
         '%{_bindir}/%{name}',
         '/etc/xdg/autostart/%{name}.desktop'
     ] + [
-        '%{_datadir}/'+path for path in APPS + ICONS + MIMES
+        '%{_datadir}/'+path for path in APPS + ICONS + MIMES + SCHEMAS
     ] + [
         '%{_datadir}/'+path+'.gz' for path in MANS
     ])
