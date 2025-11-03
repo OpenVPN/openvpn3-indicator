@@ -112,16 +112,16 @@ class Application(Gtk.Application):
         return -1
 
     def on_activate(self, data):
-        logging.info(f'Activate')
+        self.info(f'Activate')
 
     def on_open(self, application, files, n_files, hint):
-        logging.info(f'Open {n_files} {hint}')
+        self.info(f'Open {n_files} {hint}')
         for file in files:
             config_path = file.get_path()
             self.action_config_open(config_path)
 
     def on_startup(self, data):
-        logging.info(f'Startup')
+        self.info(f'Startup')
         DBusGMainLoop(set_as_default=True)
 
         bus = dbus.Bus()
@@ -162,7 +162,7 @@ class Application(Gtk.Application):
             try:
                 cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
             except dbus.exceptions.DBusException:
-                logging.debug(f'Waiting for backend to start')
+                self.debug(f'Waiting for backend to start')
                 time.sleep(0.5)
                 cmgr_version = str(cmgr_prop.Get('net.openvpn.v3.configuration','version'))
             if cmgr_version.startswith('git:'):
@@ -174,13 +174,13 @@ class Application(Gtk.Application):
                 # like v19_beta, v22_dev
                 self.manager_version = int(re.split(r'[^0-9]', cmgr_version[1:], 1)[0])
         except:
-            logging.debug(traceback.format_exc())
-            logging.warning(f'Backend version check failed')
+            self.debug(traceback.format_exc())
+            self.warning(f'Backend version check failed')
         if self.manager_version < MANAGER_VERSION_MINIMUM:
             self.error(f'You are using version {self.manager_version} of OpenVPN3 software which is not supported. Consider an upgrade to a newer version. We recommend version {MANAGER_VERSION_RECOMMENDED}.', notify=True)
         elif self.manager_version < MANAGER_VERSION_RECOMMENDED:
             self.warning(f'You are using version {self.manager_version} of OpenVPN3 software. Consider an upgrade to a newer version. We recommend version {MANAGER_VERSION_RECOMMENDED}.', notify=True)
-        logging.debug(f'Running with manager version {self.manager_version}')
+        self.debug(f'Running with manager version {self.manager_version}')
 
         self.credential_store = CredentialStore()
 
@@ -323,17 +323,17 @@ class Application(Gtk.Application):
                 self.session_configs = new_session_configs
                 self.session_statuses = new_session_statuses
 
-                logging.debug(f'Configs: {sorted(self.configs.keys())}')
-                logging.debug(f'Sessions: {sorted(self.sessions.keys())}')
-                logging.debug(f'Config names: {self.config_names}')
-                logging.debug(f'Config sessions: {self.config_sessions}')
-                logging.debug(f'Session configs: {self.session_configs}')
-                logging.debug(f'Session statuses: {self.session_statuses}')
+                self.debug(f'Configs: {sorted(self.configs.keys())}')
+                self.debug(f'Sessions: {sorted(self.sessions.keys())}')
+                self.debug(f'Config names: {self.config_names}')
+                self.debug(f'Config sessions: {self.config_sessions}')
+                self.debug(f'Session configs: {self.session_configs}')
+                self.debug(f'Session statuses: {self.session_statuses}')
                 self.invalid_sessions = False
                 self.invalid_ui = True
             except: #TODO: Catch only expected exceptions
-                logging.debug(traceback.format_exc())
-                logging.warning(f'Session list refresh failed')
+                self.debug(traceback.format_exc())
+                self.warning(f'Session list refresh failed')
             for session_id in new_session_ids:
                 session_status = self.session_statuses[session_id]
                 self.on_session_event(session_id, session_status['major'], session_status['minor'], session_status['message'])
@@ -351,18 +351,33 @@ class Application(Gtk.Application):
 
     def action_settings_startup(self, _object, value):
         self.settings.set_string('startup-action', value)
+        self.invalid_ui = True
+        self.refresh_ui()
 
     def construct_menu_settings_startup(self):
+        startup_action = self.settings.get_string('startup-action') or ''
         menu = Gtk.Menu()
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('No Connection'))
-        menu_item.connect('activate', self.action_settings_startup, '')
+        menu_action = ''
+        menu_title = gettext.gettext('No Connection')
+        if startup_action == menu_action:
+            menu_title += ' ✓'
+        menu_item = Gtk.MenuItem.new_with_label(menu_title)
+        menu_item.connect('activate', self.action_settings_startup, menu_action)
         menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Restart Connection'))
-        menu_item.connect('activate', self.action_settings_startup, 'RESTART')
+        menu_action = 'RESTART'
+        menu_title = gettext.gettext('Restart Connection')
+        if startup_action == menu_action:
+            menu_title += ' ✓'
+        menu_item = Gtk.MenuItem.new_with_label(menu_title)
+        menu_item.connect('activate', self.action_settings_startup, menu_action)
         menu.append(menu_item)
         for config_name, config_id in sorted(self.name_configs.items()):
-            menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Start {name}').format(name=config_name))
-            menu_item.connect('activate', self.action_settings_startup, f'STARTNAME:{config_name}')
+            menu_action = f'STARTNAME:{config_name}'
+            menu_title = gettext.gettext('Start {name}').format(name=config_name)
+            if startup_action == menu_action:
+                menu_title += ' ✓'
+            menu_item = Gtk.MenuItem.new_with_label(menu_title)
+            menu_item.connect('activate', self.action_settings_startup, menu_action)
             menu.append(menu_item)
         return menu
 
@@ -537,7 +552,7 @@ class Application(Gtk.Application):
             notifier.active = True
 
     def on_session_manager_event(self, event):
-        logging.info(f'Session Manager Event {event}')
+        self.info(f'Session Manager Event {event}')
         event_type = event.GetType()
         if openvpn3.SessionManagerEventType.SESS_CREATED == event_type:
             self.invalid_sessions = True
@@ -545,7 +560,7 @@ class Application(Gtk.Application):
             self.invalid_sessions = True
 
     def on_network_manager_event(self, event):
-        logging.info(f'Network Manager Event {event}')
+        self.info(f'Network Manager Event {event}')
 
     def can_store_input_slot(self, input_slot):
         type, group = input_slot.GetTypeGroup()
@@ -558,7 +573,7 @@ class Application(Gtk.Application):
                 #openvpn3.ClientAttentionGroup.CHALLENGE_DYNAMIC,
                 #openvpn3.ClientAttentionGroup.CHALLENGE_AUTH_PENDING,
             ]
-        logging.debug(f'Input slot {input_slot.GetLabel()} of type {type}, group {group} is decided {"not " if not result else ""}safe for storage')
+        self.debug(f'Input slot {input_slot.GetLabel()} of type {type}, group {group} is decided {"not " if not result else ""}safe for storage')
         return result
         print(type,group)
 
@@ -567,7 +582,7 @@ class Application(Gtk.Application):
         major = openvpn3.StatusMajor(major)
         minor = openvpn3.StatusMinor(minor)
         message = str(message)
-        logging.info(f'Session Event {major} {minor} {message}')
+        self.info(f'Session Event {major} {minor} {message}')
         self.session_statuses[session_id] = {
             'major' : major,
             'minor' : minor,
@@ -582,7 +597,7 @@ class Application(Gtk.Application):
                     session.Connect()
                     self.sessions_connected.add(session_id)
             except: #TODO: Catch only expected exceptions
-                logging.debug(traceback.format_exc())
+                self.debug(traceback.format_exc())
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
             self.action_auth_url(None, session_id, message)
         if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
@@ -626,7 +641,7 @@ class Application(Gtk.Application):
                         force_ui = True
                 self.action_get_credentials(None, session_id, required_credentials, force_ui=force_ui)
             except: #TODO: Catch only expected exceptions
-                logging.debug(traceback.format_exc())
+                self.debug(traceback.format_exc())
                 #TODO: Catch only expected exceptions
                 #TODO: Notify authentication failure
                 #TODO: Record authentication failure
@@ -720,13 +735,13 @@ class Application(Gtk.Application):
             session.Connect()
             self.sessions_connected.add(session_id)
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             self.action_session_disconnect(None, session_id)
 
     def on_schedule(self):
-        logging.debug(f'Schedule')
+        self.debug(f'Schedule')
         if self.last_invalid + 30 < time.monotonic():
-            logging.debug('Forced refresh of sessions')
+            self.debug('Forced refresh of sessions')
             self.invalid_sessions = True
         if self.invalid_sessions:
             self.last_invalid = time.monotonic()
@@ -744,18 +759,18 @@ class Application(Gtk.Application):
         GLib.timeout_add(1000, self.on_schedule)
 
     def action_config_connect(self, _object, config_id):
-        logging.info(f'Connect Config {config_id}')
+        self.info(f'Connect Config {config_id}')
         if config_id not in self.configs:
             return
         try:
             session = self.session_manager.NewTunnel(self.configs[config_id])
             self.settings.set_string('most-recent-configuration-id', config_id)
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_config_remove(self, _object, config_id):
-        logging.info(f'Remove Config {config_id}')
+        self.info(f'Remove Config {config_id}')
         if config_id not in self.configs:
             return
         try:
@@ -767,61 +782,61 @@ class Application(Gtk.Application):
             dialog = construct_configuration_remove_dialog(name=self.get_config_name(config_id), on_remove=on_remove)
             dialog.set_visible(True)
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_session_connect(self, _object, session_id):
-        logging.info(f'Connect Session {session_id}')
+        self.info(f'Connect Session {session_id}')
         if session_id not in self.sessions:
             return
         try:
             self.sessions[session_id].Connect()
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_session_pause(self, _object, session_id):
-        logging.info(f'Pause Session {session_id}')
+        self.info(f'Pause Session {session_id}')
         if session_id not in self.sessions:
             return
         try:
             self.sessions[session_id].Pause()
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_session_resume(self, _object, session_id):
-        logging.info(f'Resume Session {session_id}')
+        self.info(f'Resume Session {session_id}')
         if session_id not in self.sessions:
             return
         try:
             self.sessions[session_id].Resume()
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_session_restart(self, _object, session_id):
-        logging.info(f'Restart Session {session_id}')
+        self.info(f'Restart Session {session_id}')
         if session_id not in self.sessions:
             return
         try:
             self.sessions[session_id].Restart()
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def action_session_disconnect(self, _object, session_id):
-        logging.info(f'Disconnect Session {session_id}')
+        self.info(f'Disconnect Session {session_id}')
         if session_id not in self.sessions:
             return
         try:
             self.sessions[session_id].Disconnect()
         except: #TODO: Catch only expected exceptions
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             pass
 
     def on_config_import(self, name, path):
-        logging.info(f'Import Config {name} {path}')
+        self.info(f'Import Config {name} {path}')
         try:
             try:
                 config_description = pathlib.Path(path).read_text()
@@ -893,14 +908,14 @@ class Application(Gtk.Application):
                         dialog=True,
                         title="Configuration Import Failed"
                     )
-                    logging.info(f'Removing Config {name}')
+                    self.info(f'Removing Config {name}')
                     config_obj.Remove()
                     return
 
             self.invalid_sessions = True
             self.info(msg=f'Successfully imported config {name} from {path}', notify=True)
         except:
-            logging.debug(traceback.format_exc())
+            self.debug(traceback.format_exc())
             self.error(
                 msg=f"Unexpected error importing configuration {name} from {path}",
                 notify=False,
@@ -909,22 +924,22 @@ class Application(Gtk.Application):
             )
 
     def action_config_import(self, _object):
-        logging.info(f'Import Config')
+        self.info(f'Import Config')
         dialog = construct_configuration_select_dialog(on_import=self.on_config_import)
         dialog.set_visible(True)
 
     def action_config_open(self, path):
-        logging.info(f'Import Config {path}')
+        self.info(f'Import Config {path}')
         dialog = construct_configuration_import_dialog(path=path, on_import=self.on_config_import)
         dialog.set_visible(True)
 
     def action_about(self, _object):
-        logging.info(f'About')
+        self.info(f'About')
         dialog = construct_about_dialog()
         dialog.set_visible(True)
 
     def action_quit(self, _object):
-        logging.info(f'Quit')
+        self.info(f'Quit')
         self.release()
 
     def logging_notify(self, msg, title=f'{APPLICATION_NAME}', icon='active'):
