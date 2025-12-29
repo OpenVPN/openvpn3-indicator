@@ -7,16 +7,15 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--directory', required=True)
 parser.add_argument('--executable', required=True)
-parser.add_argument('--python')
+parser.add_argument('--python', default='/usr/bin/env python3')
+
 args = parser.parse_args()
 directory = pathlib.Path(args.directory)
 executable = pathlib.Path(args.executable)
+
 assert directory.is_dir()
 
-header = b'#!/usr/bin/env python3\n'
-
-if args.python is not None:
-    header = f'#!{args.python}\n'.encode()
+header = f'#!{args.python}\n'.encode()
 
 binary = subprocess.run(
             ['zip', '-', '--recurse-paths', '-9', '.', ],
