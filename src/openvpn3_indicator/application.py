@@ -27,19 +27,22 @@ import re
 import sys
 import time
 import traceback
+import webbrowser
 
-import dbus
-from dbus.mainloop.glib import DBusGMainLoop
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, GObject, Gtk, Gio
+
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
 try:
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-except (ValueError, ImportError):
+except:
     gi.require_version('AppIndicator3', '0.1')
     from gi.repository import AppIndicator3
-import webbrowser
+
+import openvpn3
 
 from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLICATION_NAME, APPLICATION_TITLE, APPLICATION_SYSTEM_TAG
 from openvpn3_indicator.about import MANAGER_VERSION_MINIMUM, MANAGER_VERSION_RECOMMENDED
@@ -52,14 +55,6 @@ from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, constru
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
 
-try:
-    import openvpn3
-except:
-    logging.critical('OpenVPN Indicator requires OpenVPN3 python library to run. Please install OpenVPN3.')
-    dialog = construct_openvpn_missing_dialog()
-    dialog.set_visible(True)
-    dialog.run()
-    sys.exit(1)
 
 #TODO: Which input slots should not be stored ? (OTPs, etc.)
 #TODO: Understand better the possible session state changes

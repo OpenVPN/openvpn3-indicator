@@ -46,6 +46,25 @@ def construct_appindicator_missing_dialog():
     return dialog
 
 
+def construct_dbus_missing_dialog():
+    dialog = Gtk.MessageDialog()
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
+    dialog.set_icon_name(APPLICATION_NAME)
+    dialog.add_buttons(
+            Gtk.STOCK_OK, Gtk.ResponseType.OK,
+        )
+    dialog.set_markup('<b>D-Bus not available</b>')
+    dialog.format_secondary_text('OpenVPN Indicator requires D-Bus to run. Please install required libraries.')
+
+    def on_dialog_response(_object, response):
+        dialog.destroy()
+
+    dialog.connect('response', on_dialog_response)
+    dialog.show_all()
+    return dialog
+
+
 def construct_openvpn_missing_dialog():
     dialog = Gtk.MessageDialog()
     dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -56,6 +75,25 @@ def construct_openvpn_missing_dialog():
         )
     dialog.set_markup('<b>OpenVPN3 not available</b>')
     dialog.format_secondary_text('OpenVPN Indicator requires OpenVPN3 python library to run. Please install OpenVPN3.')
+
+    def on_dialog_response(_object, response):
+        dialog.destroy()
+
+    dialog.connect('response', on_dialog_response)
+    dialog.show_all()
+    return dialog
+
+
+def construct_secret_storage_missing_dialog():
+    dialog = Gtk.MessageDialog()
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
+    dialog.set_icon_name(APPLICATION_NAME)
+    dialog.add_buttons(
+            Gtk.STOCK_OK, Gtk.ResponseType.OK,
+        )
+    dialog.set_markup('<b>Secret Storage not available</b>')
+    dialog.format_secondary_text('OpenVPN Indicator requires Secret Storage to run. Please install required libraries.')
 
     def on_dialog_response(_object, response):
         dialog.destroy()
