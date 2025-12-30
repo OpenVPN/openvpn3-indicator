@@ -84,7 +84,7 @@ It should be considered as a temporary work-around until Network Manager impleme
             'zip',
         ]
     REQUIRES  = [
-            'openvpn3',
+            'openvpn3 | openvpn3-client',
             'python3-dbus',
             'python3-gi',
             'python3-secretstorage',
