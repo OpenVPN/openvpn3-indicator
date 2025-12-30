@@ -35,7 +35,7 @@ CredentialsUserInput = collections.namedtuple(
     )
 
 
-def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect=None, on_cancel=None):
+def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect=None, on_cancel=None, remain_active=None):
     dialog = Gtk.Dialog('OpenVPN Credentials')
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)
@@ -92,10 +92,22 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
                 on_connect(user_inputs=results, store=store)
         dialog.destroy()
 
+    def on_schedule():
+        if remain_active():
+            GLib.timeout_add(1000, on_schedule)
+        else:
+            try:
+                dialog.disconnect_by_func(on_dialog_destroy)
+                dialog.destroy()
+            except:
+                pass
+
     dialog.connect('destroy', on_dialog_destroy)
     dialog.connect('response', on_dialog_response)
     default = dialog.get_widget_for_response(response_id=Gtk.ResponseType.OK)
     default.set_can_default(True)
     default.grab_default()
     dialog.show_all()
+    if remain_active is not None:
+        GLib.timeout_add(1000, on_schedule)
     return dialog

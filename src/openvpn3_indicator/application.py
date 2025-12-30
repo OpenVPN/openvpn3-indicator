@@ -583,6 +583,8 @@ class Application(Gtk.Application):
         print(type,group)
 
     def on_session_event(self, session_id, major, minor, message):
+        if session_id not in self.sessions:
+            return
         session = self.sessions[session_id]
         major = openvpn3.StatusMajor(major)
         minor = openvpn3.StatusMinor(minor)
@@ -721,7 +723,17 @@ class Application(Gtk.Application):
                 self.on_session_credentials(session_id, credentials)
 
             session_name = self.get_session_name(session_id)
-            dialog = construct_credentials_dialog(session_name, user_inputs, on_connect=on_connect, on_cancel=on_cancel)
+            def remain_active():
+                self.debug('Remain active')
+                if session_id in self.session_statuses:
+                    major = self.session_statuses[session_id]['major']
+                    minor = self.session_statuses[session_id]['minor']
+                    if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
+                        return True
+                if session_id in self.session_dialogs:
+                    del self.session_dialogs[session_id]
+                return False
+            dialog = construct_credentials_dialog(session_name, user_inputs, on_connect=on_connect, on_cancel=on_cancel, remain_active=remain_active)
             dialog.set_visible(True)
             if session_id in self.session_dialogs:
                 self.session_dialogs[session_id].destroy()

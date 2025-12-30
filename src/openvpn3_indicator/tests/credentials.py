@@ -25,9 +25,9 @@ class Test(Gtk.Application):
         self.hold()
 
         user_inputs = [
-                CredentialsUserInput(name='Username', mask=False, value='user'),
-                CredentialsUserInput(name='Password', mask=True, value=None),
-                CredentialsUserInput(name='Other', mask=True, value='rehto'),
+                CredentialsUserInput(name='Username', mask=False, value='user', can_store=True),
+                CredentialsUserInput(name='Password', mask=True, value=None, can_store=True),
+                CredentialsUserInput(name='Other', mask=True, value='rehto', can_store=True),
                 ]
         
         dialog = construct_credentials_dialog('Test', user_inputs, on_connect=self.action_connect, on_cancel=self.action_quit)
