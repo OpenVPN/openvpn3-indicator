@@ -86,6 +86,8 @@ class Application(Gtk.Application):
         self.add_main_option('verbose', ord('v'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show more info", None)
         self.add_main_option('debug', ord('d'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show debug info", None)
         self.add_main_option('silent', ord('s'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show less info", None)
+        self.clear_secret_storage = False
+        self.add_main_option('clear-secret-storage', ord('c'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Remove all data stored in secret storage", None)
         self.connect('handle-local-options', self.on_handle_local_options)
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
@@ -97,6 +99,8 @@ class Application(Gtk.Application):
         if options.get('version', False):
             print(f'{APPLICATION_NAME} {APPLICATION_VERSION}')
             return 0
+        if options.get('clear-secret-storage', False):
+            self.clear_secret_storage = True
         if options.get('debug', False):
             level = logging.DEBUG
         elif options.get('silent', False):
@@ -178,6 +182,12 @@ class Application(Gtk.Application):
         self.debug(f'Running with manager version {self.manager_version}')
 
         self.credential_store = CredentialStore()
+        if self.clear_secret_storage:
+            for config in self.credential_store.keys():
+                credentials = self.credential_store[config]
+                for key in list(credentials.keys()):
+                    self.info(f'Removing entry {key} from secret storage')
+                    del credentials[key]
 
         self.configs = dict()
         self.sessions = dict()
