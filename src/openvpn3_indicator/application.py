@@ -54,12 +54,11 @@ from openvpn3_indicator.dialogs.system_checks import construct_appindicator_miss
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
+from openvpn3_indicator.status import get_status_icon, get_status_description
 
 
 #TODO: Which input slots should not be stored ? (OTPs, etc.)
 #TODO: Understand better the possible session state changes
-#TODO: Present session state (change icon on errors, etc.)
-#TODO: Notify user on some of the session state changes
 #TODO: Collect and present session logs and stats
 #TODO: Implement other than AppIndicator ways to have system tray icon
 #TODO: /usr/share/metainfo ?
@@ -242,7 +241,7 @@ class Application(Gtk.Application):
                 if indicator is None:
                     session_name = self.get_session_name(session_id)
                     indicator = self.multi_indicator.new_indicator()
-                    indicator.icon = f'{APPLICATION_NAME}-active'
+                    indicator.icon = self.session_icon(session_id)
                     indicator.description = f'{APPLICATION_TITLE}: {session_name}'
                     indicator.title = f'{APPLICATION_TITLE}: {session_name}'
                     indicator.order_key = f'1-{session_name}-{session_id}'
@@ -254,9 +253,9 @@ class Application(Gtk.Application):
                 if notifier is None:
                     session_name = self.get_session_name(session_id)
                     notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status')
-                    notifier.icon = '{APPLICATION_NAME}-active'
+                    notifier.icon = self.session_icon(session_id)
                     notifier.title = f'{APPLICATION_TITLE}: {session_name}'
-                    notifier.title = session_name
+                    notifier.body = self.session_description(session_id)
                     notifier.active = False
                 new_notifiers[session_id] = notifier
             for session_id, indicator in self.indicators.items():
@@ -492,57 +491,13 @@ class Application(Gtk.Application):
         status = self.session_statuses[session_id]
         major = status['major']
         minor = status['minor']
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
-            return f'{APPLICATION_NAME}-loading'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_USERPASS == minor:
-            return f'{APPLICATION_NAME}-loading'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_CHALLENGE == minor:
-            return f'{APPLICATION_NAME}-loading'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
-            return f'{APPLICATION_NAME}-loading'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
-            return f'{APPLICATION_NAME}-active-error'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
-            return f'{APPLICATION_NAME}-idle-error'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
-            return f'{APPLICATION_NAME}-idle-error'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
-            return f'{APPLICATION_NAME}-idle'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
-            return f'{APPLICATION_NAME}-idle'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
-            return f'{APPLICATION_NAME}-loading'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_PAUSED == minor:
-            return f'{APPLICATION_NAME}-paused'
-        return f'{APPLICATION_NAME}-active'
+        return get_status_icon(major, minor)
 
     def session_description(self, session_id):
         status = self.session_statuses[session_id]
         major = status['major']
         minor = status['minor']
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_OK == minor:
-            return f'Configuration OK'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_USERPASS == minor:
-            return f'Authentication required'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_CHALLENGE == minor:
-            return f'Authentication required'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.SESS_AUTH_URL == minor:
-            return f'Authentication required'
-        if openvpn3.StatusMajor.SESSION == major and openvpn3.StatusMinor.PROC_STOPPED == minor:
-            return f'Stopped'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_AUTH_FAILED == minor:
-            return f'Authentication failed'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_FAILED == minor:
-            return f'Connection failed'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DISCONNECTED == minor:
-            return f'Disconnected'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_DONE == minor:
-            return f'Disconnected'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CFG_REQUIRE_USER == minor:
-            return f'Authentication required'
-        if openvpn3.StatusMajor.CONNECTION == major and openvpn3.StatusMinor.CONN_PAUSED == minor:
-            return f'Paused'
-        return f'Connected'
+        return get_status_description(major, minor)
 
     def notify_session_change(self, session_id):
         indicator = self.indicators.get(session_id, None)
