@@ -76,7 +76,7 @@ class MultiNotifier():
         def timeout(self):
             return self._timeout
 
-        def __init__(self, parent, identifier, active=False, icon=None, title=None, body=None, category=None, priority=None, timespan=None):
+        def __init__(self, parent, identifier, active=False, icon=None, title=None, body=None, category=None, priority=None, timespan=None, mute_repetitions=False):
             self._parent = parent
             self._identifier = identifier
             self._active = active
@@ -86,6 +86,8 @@ class MultiNotifier():
             self._category = category or self.parent.default_category
             self._priority = priority or self.parent.default_priority
             self._timespan = timespan or self.parent.default_timespan
+            self._mute_repetitions = mute_repetitions
+            self._last_sent = None
             self._sent = None
             self._timeout = None
 
@@ -187,22 +189,26 @@ class MultiNotifier():
         if notifier.timeout is not None and notifier.timeout < time.monotonic():
             notifier.active = False
         if notifier.active and notifier.sent is None:
-            notifier._sent = time.monotonic()
-            notifier._timeout = notifier.timespan and notifier.sent + notifier.timespan
-
-            target = Gio.Notification.new(notifier.title or '')
-            if notifier.icon is not None:
-                icon = Gio.Icon.new_for_string(notifier.icon)
-                target.set_icon(icon)
-            if notifier.title is not None:
-                target.set_title(notifier.title)
-            if notifier.body is not None:
-                target.set_body(notifier.body)
-            if notifier.category is not None:
-                target.set_category(notifier.category)
-            if notifier.priority is not None:
-                target.set_priority(notifier.priority)
-            self.application.send_notification(notifier.identifier, target)
+            send_description = (notifier.icon, notifier.title, notifier.body, notifier.category, notifier.priority)
+            if notifier._mute_repetitions and notifier._last_sent == send_description:
+                notifier.active = False
+            else:
+                notifier._sent = time.monotonic()
+                notifier._timeout = notifier.timespan and notifier.sent + notifier.timespan
+                notifier._last_sent = send_description
+                target = Gio.Notification.new(notifier.title or '')
+                if notifier.icon is not None:
+                    icon = Gio.Icon.new_for_string(notifier.icon)
+                    target.set_icon(icon)
+                if notifier.title is not None:
+                    target.set_title(notifier.title)
+                if notifier.body is not None:
+                    target.set_body(notifier.body)
+                if notifier.category is not None:
+                    target.set_category(notifier.category)
+                if notifier.priority is not None:
+                    target.set_priority(notifier.priority)
+                self.application.send_notification(notifier.identifier, target)
         if not notifier.active and notifier.sent is not None:
             notifier._sent = None
             notifier._timeout = None

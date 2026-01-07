@@ -50,7 +50,7 @@ from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
 from openvpn3_indicator.credential_store import CredentialStore
 from openvpn3_indicator.dialogs.about import construct_about_dialog
-from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog, construct_openvpn_missing_dialog
+from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
@@ -252,7 +252,7 @@ class Application(Gtk.Application):
                 notifier = self.notifiers.get(session_id, None)
                 if notifier is None:
                     session_name = self.get_session_name(session_id)
-                    notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status')
+                    notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status', mute_repetitions=True)
                     notifier.icon = self.session_icon(session_id)
                     notifier.title = f'{APPLICATION_TITLE}: {session_name}'
                     notifier.body = self.session_description(session_id)
@@ -923,6 +923,7 @@ class Application(Gtk.Application):
             icon = icon,
             active = True,
             timespan = 2,
+            mute_repetitions = False,
         )
         self.multi_notifier.update()
 
