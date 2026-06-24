@@ -91,6 +91,7 @@ class Application(Gtk.Application):
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
         self.connect('open', self.on_open)
+        self.connect('shutdown', self.on_shutdown)
 
     def on_handle_local_options(self, application, options):
         options = options.end().unpack()
@@ -118,11 +119,19 @@ class Application(Gtk.Application):
             config_path = file.get_path()
             self.action_config_open(config_path)
 
+    def on_shutdown(self, application):
+        self.info('Shutdown')
+        if hasattr(self, 'multi_indicator'):
+            self.multi_indicator.close()
+        if hasattr(self, 'multi_notifier'):
+            self.multi_notifier.close()
+
     def on_startup(self, data):
         self.info(f'Startup')
         DBusGMainLoop(set_as_default=True)
 
         bus = dbus.Bus()
+        self.session_bus = bus
         notifier_fail_count = 0
         while True:
             try:
@@ -141,6 +150,13 @@ class Application(Gtk.Application):
 
         self.multi_notifier = MultiNotifier(self, f'{APPLICATION_NAME}')
         self.notifiers = dict()
+        self.session_bus.add_signal_receiver(
+            self.on_status_notifier_watcher_owner_changed,
+            signal_name='NameOwnerChanged',
+            dbus_interface='org.freedesktop.DBus',
+            bus_name='org.freedesktop.DBus',
+            arg0='org.kde.StatusNotifierWatcher',
+        )
 
         self.dbus = dbus.SystemBus()
         self.config_manager = openvpn3.ConfigurationManager(self.dbus)
@@ -232,6 +248,15 @@ class Application(Gtk.Application):
 
         GLib.timeout_add(1000, self.on_schedule)
         self.hold()
+
+    def on_status_notifier_watcher_owner_changed(self, name, old_owner, new_owner):
+        old_owner = str(old_owner)
+        new_owner = str(new_owner)
+        self.info(f'StatusNotifierWatcher owner changed from {old_owner or "<none>"} to {new_owner or "<none>"}')
+        if not new_owner:
+            return
+        self.multi_indicator.reset()
+        self.invalid_ui = True
 
     def refresh_ui(self):
         if self.invalid_ui:
