@@ -195,7 +195,15 @@ class MultiIndicator():
 
     def hide_indicator(self, num):
         target = self.sub_indicator(num)
+        target.set_menu(Gtk.Menu())
         target.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+
+    def reset(self):
+        for indicator in self._sub_indicators:
+            indicator.set_menu(Gtk.Menu())
+            indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+        self._sub_indicators = list()
+        self.invalid = True
 
     def update(self):
         if self.invalid:
