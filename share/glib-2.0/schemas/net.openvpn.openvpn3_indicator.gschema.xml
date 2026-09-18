@@ -12,6 +12,18 @@
             </description>
             <default>''</default>
         </key>
+        <key type='s' name='indicator-mode'>
+            <choices>
+                <choice value='single'/>
+                <choice value='per-session'/>
+            </choices>
+            <summary>Tray icon mode</summary>
+            <description>
+                Set to "single" to show one tray icon that represents all connections.
+                Set to "per-session" to show one tray icon for every running connection.
+            </description>
+            <default>'single'</default>
+        </key>
         <key type='s' name='most-recent-configuration-id'>
             <summary>Id of the most recently started configuration.</summary>
             <description>

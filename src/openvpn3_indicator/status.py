@@ -74,12 +74,60 @@ register_status('PROC_STOPPED',           'idle-error', 'Process stopped')
 register_status('PROC_KILLED',            'idle-error', 'Process killed')
 
 
+# Marker appended to a configuration's label in the single-icon menu for the
+# transient states.  A connected session is shown as a checked menu item
+# instead, which status hosts draw in the menu's left border.
+STATUS_MARKERS = {
+    'active-error': '\u2717',   # ballot x
+    'paused':       '\u23f8',   # pause symbol
+    'loading':      '\u2026',   # ellipsis
+    'idle-error':   '\u2717',   # ballot x
+}
+
+
+def get_status_class(major, minor):
+    """Icon class of a session status: idle, idle-error, loading, active, paused..."""
+    if minor in status_descriptions:
+        icon = status_descriptions[minor].icon
+        if icon:
+            return icon
+    return 'idle'
+
+
 def get_status_icon(major, minor):
     if minor in status_descriptions:
         icon = status_descriptions[minor].icon
         if icon:
             return f'{APPLICATION_NAME}-{icon}'
     return DEFAULT_ICON
+
+
+def get_status_marker(major, minor):
+    return STATUS_MARKERS.get(get_status_class(major, minor), '')
+
+
+def get_aggregate_icon(statuses):
+    """Icon summarising several sessions, for the single tray icon mode.
+
+    statuses is an iterable of (major, minor) pairs.  Something in progress
+    (connecting, authenticating) wins because it may need the user's
+    attention, then a connected session, then a paused one, then errors.
+    """
+    classes = set(get_status_class(major, minor) for major, minor in statuses)
+    if 'loading' in classes:
+        icon = 'loading'
+    elif 'active' in classes or 'active-error' in classes:
+        if 'idle-error' in classes or 'active-error' in classes:
+            icon = 'active-error'
+        else:
+            icon = 'active'
+    elif 'paused' in classes:
+        icon = 'paused'
+    elif 'idle-error' in classes:
+        icon = 'idle-error'
+    else:
+        icon = 'idle'
+    return f'{APPLICATION_NAME}-{icon}'
 
 
 def get_status_description(major, minor):

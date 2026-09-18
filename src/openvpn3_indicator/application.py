@@ -20,6 +20,7 @@
 # If not, see <https://www.gnu.org/licenses/>.
 #
 
+import functools
 import gettext
 import logging
 import pathlib
@@ -48,13 +49,14 @@ from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLIC
 from openvpn3_indicator.about import MANAGER_VERSION_MINIMUM, MANAGER_VERSION_RECOMMENDED
 from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
+from openvpn3_indicator.check_menu_item import StateCheckMenuItem
 from openvpn3_indicator.credential_store import CredentialStore
 from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
-from openvpn3_indicator.status import get_status_icon, get_status_description
+from openvpn3_indicator.status import get_status_icon, get_status_description, get_status_class, get_status_marker, get_aggregate_icon
 
 
 #TODO: Which input slots should not be stored ? (OTPs, etc.)
@@ -67,6 +69,11 @@ from openvpn3_indicator.status import get_status_icon, get_status_description
 
 DEFAULT_CONFIG_NAME = gettext.gettext('UNKNOWN')
 DEFAULT_SESSION_NAME = gettext.gettext('UNKNOWN')
+
+# Values of the indicator-mode setting.
+INDICATOR_MODE_SINGLE = 'single'
+INDICATOR_MODE_PER_SESSION = 'per-session'
+INDICATOR_MODES = (INDICATOR_MODE_SINGLE, INDICATOR_MODE_PER_SESSION)
 
 ###
 #
@@ -87,6 +94,10 @@ class Application(Gtk.Application):
         self.add_main_option('silent', ord('s'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show less info", None)
         self.clear_secret_storage = False
         self.add_main_option('clear-secret-storage', ord('c'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Remove all data stored in secret storage", None)
+        self.add_main_option('repair', ord('r'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Ask the running instance to re-create its tray icons and exit", None)
+        repair_action = Gio.SimpleAction.new('repair', None)
+        repair_action.connect('activate', self.on_action_repair)
+        self.add_action(repair_action)
         self.connect('handle-local-options', self.on_handle_local_options)
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
@@ -108,10 +119,90 @@ class Application(Gtk.Application):
         elif options.get('verbose', False):
             level = logging.ERROR
         logging.basicConfig(level = level)
+        if options.get('repair', False):
+            # Forward the request to the running instance through the exported
+            # action group.  If no instance is running this process becomes
+            # the primary one and simply starts up; there is nothing to repair
+            # yet in that case.
+            try:
+                self.register(None)
+            except GLib.Error as excp:
+                logging.critical(f'Failed to register application: {excp.message}')
+                return 1
+            if self.get_is_remote():
+                self.activate_action('repair', None)
+                # The remote activation is sent asynchronously; make sure it
+                # has left this process before we exit.
+                try:
+                    self.get_dbus_connection().flush_sync(None)
+                except GLib.Error as excp:
+                    logging.warning(f'Failed to flush D-Bus connection: {excp.message}')
+                return 0
         return -1
 
     def on_activate(self, data):
         self.info(f'Activate')
+        if self.startup_activation_pending:
+            # First activation of the primary instance, emitted by
+            # Gtk.Application right after startup.
+            self.startup_activation_pending = False
+            return
+        # Emitted on the running instance when the user launches the
+        # application again.  The only reason to do that is a missing tray
+        # icon, so treat it as a repair request.
+        self.repair_indicators()
+
+    def on_action_repair(self, action, parameter):
+        self.info(f'Repair requested')
+        self.repair_indicators()
+
+    def on_startup_activation_done(self):
+        # Runs on the first main loop iteration, after the startup activation.
+        self.startup_activation_pending = False
+        return GLib.SOURCE_REMOVE
+
+    def repair_indicators(self):
+        # Manual repair for a tray icon that went missing for whatever reason:
+        # re-create the indicator objects under fresh ids so the status host
+        # has to build new items from scratch.
+        if not hasattr(self, 'multi_indicator'):
+            return
+        if not self.schedule_alive():
+            self.warning('Scheduler was not running, restarting it')
+            self.schedule_source = GLib.timeout_add(1000, self.on_schedule)
+        try:
+            self.session_bus.get_name_owner('org.kde.StatusNotifierWatcher')
+        except dbus.exceptions.DBusException:
+            self.error('No system tray found on the session bus. Please enable the AppIndicator extension of your desktop.', notify=True)
+            return
+        self.multi_indicator.recreate()
+        self.last_ui_signature = None
+        self.invalid_ui = True
+        self.refresh_ui()
+        self.info('Tray icons re-created', notify=True)
+
+    def verify_registration(self):
+        # Every slot that should be visible must be listed by the watcher;
+        # libappindicator does not retry a failed registration by itself.
+        try:
+            watcher = self.session_bus.get_object('org.kde.StatusNotifierWatcher', '/StatusNotifierWatcher')
+            properties = dbus.Interface(watcher, dbus_interface='org.freedesktop.DBus.Properties')
+            registered = properties.Get('org.kde.StatusNotifierWatcher', 'RegisteredStatusNotifierItems', timeout=5)
+        except dbus.exceptions.DBusException as excp:
+            self.debug(f'Cannot read the registered items of the StatusNotifierWatcher: {excp}')
+            return
+        # libappindicator exports the items on the shared GDBus session
+        # connection, which has a different unique name than dbus-python's
+        # self.session_bus.
+        connection = self.get_dbus_connection() or Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.multi_indicator.verify_registration(str(connection.get_unique_name()), registered)
+
+    def schedule_alive(self):
+        source_id = getattr(self, 'schedule_source', 0)
+        if not source_id:
+            return False
+        source = GLib.MainContext.default().find_source_by_id(source_id)
+        return source is not None and not source.is_destroyed()
 
     def on_open(self, application, files, n_files, hint):
         self.info(f'Open {n_files} {hint}')
@@ -128,6 +219,8 @@ class Application(Gtk.Application):
 
     def on_startup(self, data):
         self.info(f'Startup')
+        self.startup_activation_pending = True
+        GLib.idle_add(self.on_startup_activation_done)
         DBusGMainLoop(set_as_default=True)
 
         bus = dbus.Bus()
@@ -216,13 +309,12 @@ class Application(Gtk.Application):
         self.session_statuses = dict()
 
         self.multi_indicator = MultiIndicator(f'{APPLICATION_NAME}')
-        self.default_indicator = self.multi_indicator.new_indicator()
-        self.default_indicator.icon=f'{APPLICATION_NAME}-idle'
-        self.default_indicator.description=f'{APPLICATION_TITLE}'
-        self.default_indicator.title=f'{APPLICATION_TITLE}'
-        self.default_indicator.order_key='0'
-        self.default_indicator.active=True
+        # Logical indicators currently shown, keyed by session id, or by None
+        # for the indicator that represents the application as a whole.
         self.indicators = dict()
+        self.last_ui_signature = None
+        self.settings.connect('changed::indicator-mode', self.on_settings_indicator_mode_changed)
+        self.info(f'Indicator mode: {self.indicator_mode}')
 
         self.last_invalid = time.monotonic()
         self.invalid_sessions = True
@@ -246,7 +338,7 @@ class Application(Gtk.Application):
         if self.startup_config_id or self.startup_config_name:
             self.info(f'Startup configuration set to {self.startup_config_id or self.startup_config_name}')
 
-        GLib.timeout_add(1000, self.on_schedule)
+        self.schedule_source = GLib.timeout_add(1000, self.on_schedule)
         self.hold()
 
     def on_status_notifier_watcher_owner_changed(self, name, old_owner, new_owner):
@@ -255,54 +347,130 @@ class Application(Gtk.Application):
         self.info(f'StatusNotifierWatcher owner changed from {old_owner or "<none>"} to {new_owner or "<none>"}')
         if not new_owner:
             return
-        self.multi_indicator.reset()
+        # libappindicator watches this name itself and re-registers every
+        # indicator with the new watcher.  Do not recreate the indicator
+        # objects here: the old objects stay alive until the watcher replies,
+        # so new objects with the same ids could not export their D-Bus paths
+        # ("An object is already exported"), and a Passive status sent while
+        # the shell is still setting up its proxy makes the icon disappear
+        # for good.  Only retry a registration that may have failed while the
+        # watcher was still starting, and do it before the GNOME extension's
+        # 2 s "brute-force" scan registers the same object under a different
+        # id (upstream issue #38).
+        for delay_ms in (1000, 4000):
+            GLib.timeout_add(delay_ms, self.on_watcher_poke)
+
+    def on_watcher_poke(self):
+        if hasattr(self, 'multi_indicator'):
+            self.multi_indicator.poke_registration()
+        return GLib.SOURCE_REMOVE
+
+    def settings_has_key(self, key):
+        schema = self.settings.get_property('settings-schema')
+        return schema is not None and schema.has_key(key)
+
+    @property
+    def indicator_mode(self):
+        # Tolerate an older installed schema without the key.
+        if self.settings_has_key('indicator-mode'):
+            mode = self.settings.get_string('indicator-mode')
+            if mode in INDICATOR_MODES:
+                return mode
+        return INDICATOR_MODE_SINGLE
+
+    def on_settings_indicator_mode_changed(self, settings, key):
+        self.info(f'Indicator mode changed to {self.indicator_mode}')
         self.invalid_ui = True
+        self.refresh_ui()
+
+    def plan_indicators(self):
+        # Describe the tray icons wanted for the current sessions and mode.
+        # Each entry: key (session id, or None for the application icon),
+        # icon, title, description, order key and a menu builder.
+        plans = list()
+        if self.indicator_mode == INDICATOR_MODE_PER_SESSION and len(self.sessions) > 0:
+            for session_id in self.sessions:
+                session_name = self.get_session_name(session_id)
+                plans.append({
+                    'key': session_id,
+                    'icon': self.session_icon(session_id),
+                    'title': f'{APPLICATION_TITLE}: {session_name}',
+                    'description': f'{APPLICATION_TITLE}: {session_name}',
+                    'order_key': f'1-{session_name}-{session_id}',
+                    'menu': functools.partial(self.construct_session_menu, session_id),
+                })
+        else:
+            if self.indicator_mode == INDICATOR_MODE_SINGLE:
+                title = f'{APPLICATION_TITLE}: {self.sessions_summary()}'
+            else:
+                title = f'{APPLICATION_TITLE}'
+            plans.append({
+                'key': None,
+                'icon': self.aggregate_icon(),
+                'title': title,
+                'description': title,
+                'order_key': '0',
+                'menu': self.construct_main_menu,
+            })
+        return plans
+
+    def ui_signature(self):
+        # Everything the indicators and their menus are built from.  While it
+        # is unchanged the existing Gtk.Menu objects are kept: a new menu
+        # closes the menu the user may have open and makes hosts refresh the
+        # icon.
+        return (
+            self.indicator_mode,
+            self.settings.get_string('startup-action'),
+            tuple(sorted(self.sessions)),
+            tuple(sorted(self.config_names.items())),
+            tuple(sorted((config_id, tuple(session_ids)) for config_id, session_ids in self.config_sessions.items())),
+            tuple(sorted(self.session_configs.items())),
+            tuple(sorted((session_id, status['major'], status['minor']) for session_id, status in self.session_statuses.items() if session_id in self.sessions)),
+        )
 
     def refresh_ui(self):
-        if self.invalid_ui:
-            new_indicators = dict()
-            for session_id in self.sessions:
-                indicator = self.indicators.get(session_id, None)
-                if indicator is None:
-                    session_name = self.get_session_name(session_id)
-                    indicator = self.multi_indicator.new_indicator()
-                    indicator.icon = self.session_icon(session_id)
-                    indicator.description = f'{APPLICATION_TITLE}: {session_name}'
-                    indicator.title = f'{APPLICATION_TITLE}: {session_name}'
-                    indicator.order_key = f'1-{session_name}-{session_id}'
-                    indicator.active = True
-                new_indicators[session_id] = indicator
-            new_notifiers = dict()
-            for session_id in self.sessions:
-                notifier = self.notifiers.get(session_id, None)
-                if notifier is None:
-                    session_name = self.get_session_name(session_id)
-                    notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status', mute_repetitions=True)
-                    notifier.icon = self.session_icon(session_id)
-                    notifier.title = f'{APPLICATION_TITLE}: {session_name}'
-                    notifier.body = self.session_description(session_id)
-                    notifier.active = False
-                new_notifiers[session_id] = notifier
-            for session_id, indicator in self.indicators.items():
-                if session_id not in new_indicators:
-                    indicator.close()
-            for session_id, notifier in self.notifiers.items():
-                if session_id not in new_notifiers:
-                    notifier.close()
-            if len(new_indicators) == 0:
-                self.default_indicator.active = True
-                #TODO: Change icon, description, etc. Based on what?
-                self.default_indicator.menu = self.construct_idle_menu()
-            else:
-                self.default_indicator.active = False
-            self.indicators = new_indicators
-            for session_id, indicator in self.indicators.items():
-                if session_id is not None:
-                    #TODO: Change icon, description, etc. based on status
-                    indicator.menu = self.construct_session_menu(session_id)
-            self.multi_indicator.update()
-            self.notifiers = new_notifiers
-            self.invalid_ui = False
+        if not self.invalid_ui:
+            return
+        signature = self.ui_signature()
+        rebuild_menus = signature != self.last_ui_signature
+        new_indicators = dict()
+        for plan in self.plan_indicators():
+            indicator = self.indicators.get(plan['key'], None)
+            if indicator is None:
+                indicator = self.multi_indicator.new_indicator()
+            indicator.icon = plan['icon']
+            indicator.description = plan['description']
+            indicator.title = plan['title']
+            indicator.order_key = plan['order_key']
+            if rebuild_menus or indicator.menu is None:
+                indicator.menu = plan['menu']()
+            indicator.active = True
+            new_indicators[plan['key']] = indicator
+        self.last_ui_signature = signature
+        for key, indicator in self.indicators.items():
+            if key not in new_indicators:
+                indicator.close()
+        self.indicators = new_indicators
+
+        new_notifiers = dict()
+        for session_id in self.sessions:
+            notifier = self.notifiers.get(session_id, None)
+            if notifier is None:
+                session_name = self.get_session_name(session_id)
+                notifier = self.multi_notifier.new_notifier(f'session-{session_id}-status', mute_repetitions=True)
+                notifier.icon = self.session_icon(session_id)
+                notifier.title = f'{APPLICATION_TITLE}: {session_name}'
+                notifier.body = self.session_description(session_id)
+                notifier.active = False
+            new_notifiers[session_id] = notifier
+        for session_id, notifier in self.notifiers.items():
+            if session_id not in new_notifiers:
+                notifier.close()
+        self.notifiers = new_notifiers
+
+        self.multi_indicator.update()
+        self.invalid_ui = False
 
     def refresh_sessions(self):
         if self.invalid_sessions:
@@ -344,6 +512,15 @@ class Application(Gtk.Application):
                         'minor' : openvpn3.StatusMinor(status['minor']),
                         'message' : str(status['message']),
                     }
+                def status_keys(statuses):
+                    return dict([ (session_id, (status['major'], status['minor'])) for session_id, status in statuses.items() ])
+                changed = (
+                    set(new_sessions) != set(self.sessions)
+                    or new_config_names != self.config_names
+                    or new_config_sessions != self.config_sessions
+                    or new_session_configs != self.session_configs
+                    or status_keys(new_session_statuses) != status_keys(self.session_statuses)
+                )
                 self.sessions = new_sessions
                 self.configs = new_configs
                 self.config_names = new_config_names
@@ -359,7 +536,8 @@ class Application(Gtk.Application):
                 self.debug(f'Session configs: {self.session_configs}')
                 self.debug(f'Session statuses: {self.session_statuses}')
                 self.invalid_sessions = False
-                self.invalid_ui = True
+                if changed:
+                    self.invalid_ui = True
             except: #TODO: Catch only expected exceptions
                 self.debug(traceback.format_exc())
                 self.warning(f'Session list refresh failed')
@@ -386,29 +564,41 @@ class Application(Gtk.Application):
     def construct_menu_settings_startup(self):
         startup_action = self.settings.get_string('startup-action') or ''
         menu = Gtk.Menu()
-        menu_action = ''
-        menu_title = gettext.gettext('No Connection')
-        if startup_action == menu_action:
-            menu_title += ' ✓'
-        menu_item = Gtk.MenuItem.new_with_label(menu_title)
-        menu_item.connect('activate', self.action_settings_startup, menu_action)
-        menu.append(menu_item)
-        menu_action = 'RESTART'
-        menu_title = gettext.gettext('Restart Connection')
-        if startup_action == menu_action:
-            menu_title += ' ✓'
-        menu_item = Gtk.MenuItem.new_with_label(menu_title)
-        menu_item.connect('activate', self.action_settings_startup, menu_action)
-        menu.append(menu_item)
+        # Check items: the status host draws the mark of the selected entry
+        # in the menu's left border (dbusmenu toggle-type "checkmark").  The
+        # mark follows the setting only, see StateCheckMenuItem.
+        choices = [
+            ('', gettext.gettext('No Connection')),
+            ('RESTART', gettext.gettext('Restart Connection')),
+        ]
         for config_name, config_id in sorted(self.name_configs.items()):
-            menu_action = f'STARTNAME:{config_name}'
-            menu_title = gettext.gettext('Start {name}').format(name=config_name)
-            if startup_action == menu_action:
-                menu_title += ' ✓'
-            menu_item = Gtk.MenuItem.new_with_label(menu_title)
+            choices.append((f'STARTNAME:{config_name}', gettext.gettext('Start {name}').format(name=config_name)))
+        for menu_action, menu_title in choices:
+            menu_item = StateCheckMenuItem(menu_title, active=(startup_action == menu_action))
             menu_item.connect('activate', self.action_settings_startup, menu_action)
             menu.append(menu_item)
         return menu
+
+    def construct_menu_settings_indicator(self):
+        current_mode = self.indicator_mode
+        menu = Gtk.Menu()
+        for mode, menu_title in (
+                (INDICATOR_MODE_SINGLE, gettext.gettext('Single Icon')),
+                (INDICATOR_MODE_PER_SESSION, gettext.gettext('One Icon per Connection')),
+            ):
+            menu_item = StateCheckMenuItem(menu_title, active=(current_mode == mode))
+            menu_item.connect('activate', self.action_settings_indicator_mode, mode)
+            menu.append(menu_item)
+        return menu
+
+    def action_settings_indicator_mode(self, _object, mode):
+        self.info(f'Set indicator mode {mode}')
+        if not self.settings_has_key('indicator-mode'):
+            self.warning('The installed settings schema has no indicator-mode key. Please reinstall the application.', notify=True)
+            return
+        self.settings.set_string('indicator-mode', mode)
+        self.invalid_ui = True
+        self.refresh_ui()
 
     def construct_menu_config(self, config_id):
         menu = Gtk.Menu()
@@ -420,12 +610,19 @@ class Application(Gtk.Application):
         menu.append(menu_item)
         return menu
 
-    def construct_menu_session(self, session_id):
+    def construct_menu_session(self, session_id, header=None):
+        # Operations on one session.  Without a header the session name is
+        # shown on top (the per-session icon menu); with a header, for
+        # example the status text, that header is shown as an inactive item.
         menu = Gtk.Menu()
-        status = self.session_statuses[session_id]
-        major = status['major']
-        minor = status['minor']
-        menu_item = Gtk.MenuItem.new_with_label(self.get_session_name(session_id))
+        status = self.session_statuses.get(session_id, None)
+        major = status['major'] if status else None
+        minor = status['minor'] if status else None
+        if header is None:
+            menu_item = Gtk.MenuItem.new_with_label(self.get_session_name(session_id))
+        else:
+            menu_item = Gtk.MenuItem.new_with_label(header)
+            menu_item.set_sensitive(False)
         menu.append(menu_item)
 
         if False: #TODO: When does it make sense to allow explicit Connect?
@@ -450,79 +647,124 @@ class Application(Gtk.Application):
             menu.append(menu_item)
         return menu
 
+    def construct_menu_item_session(self, label, session_id):
+        # Submenu entry for a running session: a check item that is checked
+        # while the session is connected (drawn in the menu's left border by
+        # the status host), a text marker for the transient states, the
+        # status text on top of the submenu and the session operations below.
+        marker = self.session_marker(session_id)
+        if marker:
+            label = f'{label} {marker}'
+        menu_item = StateCheckMenuItem(label, active=self.session_connected(session_id))
+        menu_item.set_submenu(self.construct_menu_session(session_id, header=self.session_description(session_id)))
+        return menu_item
+
+    def session_connected(self, session_id):
+        status = self.session_statuses.get(session_id, None)
+        if status is None:
+            return False
+        return get_status_class(status['major'], status['minor']) == 'active'
+
+    def construct_menu_configurations(self, menu, include_sessions):
+        # Append one submenu per configuration, sorted by name.  Configurations
+        # without a session get Connect and Remove.  Configurations with a
+        # session are listed with their session operations when
+        # include_sessions is set, otherwise skipped (the per-session icon
+        # menus show only the idle configurations).  Returns whether anything
+        # was appended.
+        added = False
+        listed_sessions = set()
+        for config_name, config_id in sorted(self.name_configs.items()):
+            session_ids = [ session_id for session_id in self.config_sessions.get(config_id, [])
+                            if session_id in self.sessions ]
+            if len(session_ids) == 0:
+                menu_item = Gtk.MenuItem.new_with_label(config_name)
+                menu_item.set_submenu(self.construct_menu_config(config_id))
+                menu.append(menu_item)
+                added = True
+            elif include_sessions:
+                for number, session_id in enumerate(session_ids, start=1):
+                    label = config_name
+                    if len(session_ids) > 1:
+                        label = f'{label} #{number}'
+                    menu.append(self.construct_menu_item_session(label, session_id))
+                    listed_sessions.add(session_id)
+                    added = True
+        if include_sessions:
+            # Sessions whose configuration is not (or no longer) known.
+            for session_id in self.sessions:
+                if session_id not in listed_sessions:
+                    menu.append(self.construct_menu_item_session(self.get_session_name(session_id), session_id))
+                    added = True
+        return added
+
+    def construct_menu_tail(self, menu):
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
+        menu_item.connect('activate', self.action_config_import)
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Startup Settings'))
+        menu_item.set_submenu(self.construct_menu_settings_startup())
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Tray Icon Settings'))
+        menu_item.set_submenu(self.construct_menu_settings_indicator())
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
+        menu_item.connect('activate', self.action_about)
+        menu.append(menu_item)
+        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
+        menu_item.connect('activate', self.action_quit)
+        menu.append(menu_item)
+        menu.show_all()
+        return menu
+
     def construct_session_menu(self, session_id):
+        # Menu of a per-session icon: this session's operations, then the idle
+        # configurations, then the common items.
         menu = self.construct_menu_session(session_id)
         menu.append(Gtk.SeparatorMenuItem())
-        add_separator = False
-        for config_name, config_id in sorted(self.name_configs.items()):
-            if len(self.config_sessions[config_id]) == 0:
-                config_menu = self.construct_menu_config(config_id)
-                menu_item = Gtk.MenuItem.new_with_label(config_name)
-                menu_item.set_submenu(config_menu)
-                menu.append(menu_item)
-                add_separator = True
-        if add_separator:
+        if self.construct_menu_configurations(menu, include_sessions=False):
             menu.append(Gtk.SeparatorMenuItem())
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
-        menu_item.connect('activate', self.action_config_import)
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Startup Settings'))
-        menu_item.set_submenu(self.construct_menu_settings_startup())
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
-        menu_item.connect('activate', self.action_about)
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
-        menu_item.connect('activate', self.action_quit)
-        menu.append(menu_item)
-        menu.show_all()
-        return menu
+        return self.construct_menu_tail(menu)
 
-    def construct_idle_menu(self):
+    def construct_main_menu(self):
+        # Menu of the single icon (and of the idle icon in per-session mode):
+        # every configuration as a submenu, then the common items.
         menu = Gtk.Menu()
-        for config_name, config_id in sorted(self.name_configs.items()):
-            session_ids = self.config_sessions[config_id]
-            if len(session_ids) > 0:
-                for session_id in session_ids:
-                    #TODO: Add some information on session status to menu items (perhaps in the title?)
-                    session = self.sessions[session_id]
-                    session_menu = self.construct_menu_session(session_id)
-                    menu_item = Gtk.MenuItem.new_with_label(config_name)
-                    menu_item.set_submenu(session_menu)
-                    menu.append(menu_item)
-            else:
-                config_menu = self.construct_menu_config(config_id)
-                menu_item = Gtk.MenuItem.new_with_label(config_name)
-                menu_item.set_submenu(config_menu)
-                menu.append(menu_item)
-        if len(self.name_configs) > 0:
+        if self.construct_menu_configurations(menu, include_sessions=True):
             menu.append(Gtk.SeparatorMenuItem())
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Import Config'))
-        menu_item.connect('activate', self.action_config_import)
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Startup Settings'))
-        menu_item.set_submenu(self.construct_menu_settings_startup())
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('About'))
-        menu_item.connect('activate', self.action_about)
-        menu.append(menu_item)
-        menu_item = Gtk.MenuItem.new_with_label(gettext.gettext('Quit'))
-        menu_item.connect('activate', self.action_quit)
-        menu.append(menu_item)
-        menu.show_all()
-        return menu
+        return self.construct_menu_tail(menu)
+
+    def session_marker(self, session_id):
+        status = self.session_statuses.get(session_id, None)
+        if status is None:
+            return ''
+        return get_status_marker(status['major'], status['minor'])
+
+    def aggregate_icon(self):
+        statuses = [ (status['major'], status['minor'])
+                     for session_id, status in self.session_statuses.items()
+                     if session_id in self.sessions ]
+        return get_aggregate_icon(statuses)
+
+    def sessions_summary(self):
+        parts = list()
+        for session_id in sorted(self.sessions, key=lambda session_id: (self.get_session_name(session_id), session_id)):
+            parts.append(f'{self.get_session_name(session_id)}: {self.session_description(session_id)}')
+        if len(parts) == 0:
+            return gettext.gettext('No active connection')
+        return ', '.join(parts)
 
     def session_icon(self, session_id):
-        status = self.session_statuses[session_id]
-        major = status['major']
-        minor = status['minor']
-        return get_status_icon(major, minor)
+        status = self.session_statuses.get(session_id, None)
+        if status is None:
+            return get_status_icon(None, None)
+        return get_status_icon(status['major'], status['minor'])
 
     def session_description(self, session_id):
-        status = self.session_statuses[session_id]
-        major = status['major']
-        minor = status['minor']
-        return get_status_description(major, minor)
+        status = self.session_statuses.get(session_id, None)
+        if status is None:
+            return get_status_description(None, None)
+        return get_status_description(status['major'], status['minor'])
 
     def notify_session_change(self, session_id):
         indicator = self.indicators.get(session_id, None)
@@ -736,24 +978,31 @@ class Application(Gtk.Application):
             self.action_session_disconnect(None, session_id)
 
     def on_schedule(self):
-        self.debug(f'Schedule')
-        if self.last_invalid + 30 < time.monotonic():
-            self.debug('Forced refresh of sessions')
-            self.invalid_sessions = True
-        if self.invalid_sessions:
-            self.last_invalid = time.monotonic()
-            self.refresh_sessions()
-        if self.invalid_ui:
-            self.refresh_ui()
-        self.multi_notifier.update()
-        if self.startup_config_id or self.startup_config_name:
-            config_id = self.startup_config_id or self.name_configs.get(self.startup_config_name, None)
-            if config_id and len(self.config_sessions[config_id]) == 0:
-                self.debug(f'Starting config {config_id} as requested in startup settings.')
-                self.action_config_connect(None, config_id)
-            self.startup_config_id = None
-            self.startup_config_name = None
-        GLib.timeout_add(1000, self.on_schedule)
+        # Repeating GLib source.  An exception escaping from here would remove
+        # the source and freeze the whole application, so catch everything.
+        try:
+            self.debug(f'Schedule')
+            if self.last_invalid + 30 < time.monotonic():
+                self.debug('Forced refresh of sessions')
+                self.invalid_sessions = True
+                self.verify_registration()
+            if self.invalid_sessions:
+                self.last_invalid = time.monotonic()
+                self.refresh_sessions()
+            if self.invalid_ui:
+                self.refresh_ui()
+            self.multi_notifier.update()
+            if self.startup_config_id or self.startup_config_name:
+                config_id = self.startup_config_id or self.name_configs.get(self.startup_config_name, None)
+                if config_id and len(self.config_sessions.get(config_id, [])) == 0:
+                    self.debug(f'Starting config {config_id} as requested in startup settings.')
+                    self.action_config_connect(None, config_id)
+                self.startup_config_id = None
+                self.startup_config_name = None
+        except Exception:
+            self.debug(traceback.format_exc())
+            self.warning('Scheduled refresh failed')
+        return GLib.SOURCE_CONTINUE
 
     def action_config_connect(self, _object, config_id):
         self.info(f'Connect Config {config_id}')
