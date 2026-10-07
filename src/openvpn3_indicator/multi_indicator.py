@@ -35,6 +35,8 @@ except (ValueError, ImportError):
 
 from openvpn3_indicator.about import *
 
+MENU_UNSET = object()
+
 ###
 #
 # MultiIndicator
@@ -48,9 +50,10 @@ class MultiIndicator():
         return self._identifier
 
     def sub_identifier(self, num):
+        suffix = f'-{self._registration_generation}' if self._registration_generation else ''
         if num == 0:
-            return f'{self.identifier}'
-        return f'{self.identifier}-{num}'
+            return f'{self.identifier}{suffix}'
+        return f'{self.identifier}{suffix}-{num}'
 
     def sub_indicator(self, num):
         while len(self._sub_indicators) <= num:
@@ -61,11 +64,17 @@ class MultiIndicator():
                 )
             sub.set_ordering_index(num)
             self._sub_indicators.append(sub)
+            self._sub_menu_keys.append(MENU_UNSET)
         return self._sub_indicators[num]
 
     def __init__(self, identifier):
         self._identifier = identifier
+        # AppIndicator uses this identifier in its D-Bus object path.  A new
+        # value after a watcher restart prevents GNOME Shell from reusing a
+        # stale tray item from before suspend/lock.
+        self._registration_generation = 0
         self._sub_indicators = list()
+        self._sub_menu_keys = list()
         self._indicators = dict()
         self.default_icon = f'{APPLICATION_NAME}'
         self.default_description = f'{APPLICATION_TITLE}'
@@ -95,6 +104,7 @@ class MultiIndicator():
             self._title = title or self.parent.default_title
             self._order_key = order_key or self.identifier
             self._menu = menu
+            self._menu_key = None
 
         def close(self):
             if self.parent:
@@ -165,6 +175,17 @@ class MultiIndicator():
                 if self.parent and self.active:
                     self.parent.invalidate()
 
+        @property
+        def menu_key(self):
+            return self._menu_key
+
+        def set_menu(self, menu_key, menu):
+            if self._menu_key != menu_key:
+                self._menu_key = menu_key
+                self.menu = menu
+                return True
+            return False
+
     def new_indicator(self, **kwargs):
         identifier = str(uuid.uuid4())
         indicator = self.Indicator(self, identifier, **kwargs)
@@ -187,22 +208,28 @@ class MultiIndicator():
         target = self.sub_indicator(num)
         target.set_icon_full(indicator.icon, indicator.description)
         target.set_title(indicator.title)
-        if indicator.menu:
-            target.set_menu(indicator.menu)
-        else:
-            target.set_menu(Gtk.Menu())
+        if self._sub_menu_keys[num] != indicator.menu_key:
+            if indicator.menu:
+                target.set_menu(indicator.menu)
+            else:
+                target.set_menu(Gtk.Menu())
+            self._sub_menu_keys[num] = indicator.menu_key
         target.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
 
     def hide_indicator(self, num):
         target = self.sub_indicator(num)
-        target.set_menu(Gtk.Menu())
         target.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
 
     def reset(self):
         for indicator in self._sub_indicators:
-            indicator.set_menu(Gtk.Menu())
             indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+        # AppIndicator can keep an old registration after the
+        # StatusNotifierWatcher restarts (for example when the screen is
+        # unlocked).  Drop the GObject instances so the next update creates
+        # fresh registrations instead of leaving duplicate tray icons.
+        self._registration_generation += 1
         self._sub_indicators = list()
+        self._sub_menu_keys = list()
         self.invalid = True
 
     def update(self):
@@ -221,5 +248,6 @@ class MultiIndicator():
             self.invalid=False
 
     def close(self):
+        self.reset()
         for indicator in list(self._indicators.values()):
             indicator.close()

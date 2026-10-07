@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenVPN3 Indicator
+# The indicator relies on GNOME's StatusNotifierWatcher, provided by the
+# AppIndicators extension.  Starting after GNOME Shell avoids registering an
+# empty menu while the extension is still initialising.
+Wants=openvpn3-desktop-session-watcher.service
+After=graphical-session.target org.gnome.Shell@wayland.service org.gnome.Shell@x11.service openvpn3-desktop-session-watcher.service
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/openvpn3-indicator
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

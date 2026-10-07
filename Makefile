@@ -4,6 +4,7 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share
 AUTOSTART ?= /etc/xdg/autostart
+SYSTEMD_USERDIR ?= $(PREFIX)/lib/systemd/user
 VERSION ?= $(shell scripts/semver)
 PREPAREDIR ?= build/prepare
 
@@ -12,6 +13,7 @@ PREFIX := $(PREFIX:/=)
 BINDIR := $(BINDIR:/=)
 DATADIR := $(DATADIR:/=)
 AUTOSTART := $(AUTOSTART:/=)
+SYSTEMD_USERDIR := $(SYSTEMD_USERDIR:/=)
 PREPAREDIR := $(PREPAREDIR:/=)
 
 SOURCES := $(shell find src -iname tests -prune -o -iname __pycache__ -prune -o -iname about.py -o -type f -print)
@@ -32,6 +34,7 @@ INSTALL_SHARES := $(patsubst %,$(DESTDIR)$(DATADIR)/%,$(SHARES))
 INSTALL_MANS := $(patsubst %,$(DESTDIR)$(DATADIR)/%.gz,$(MANS))
 INSTALL_APPLICATION := $(patsubst %,$(DESTDIR)$(DATADIR)/%,$(APPLICATION))
 INSTALL_AUTOSTART := $(DESTDIR)$(AUTOSTART)/$(PROGRAM).desktop
+INSTALL_SYSTEMD_UNIT := $(DESTDIR)$(SYSTEMD_USERDIR)/$(PROGRAM).service
 
 DEVEL_SHARES := $(patsubst %,$(HOME)/.local/share/%,$(SHARES))
 #DEVEL_MANS := 
@@ -75,11 +78,13 @@ $(PREPARE_ABOUT): $(PREPAREDIR)/% : src/%
 	sed -E -e "s|^( *APPLICATION_VERSION *= *)'[^']*' *$$|\1'$(VERSION)'|" -i $@
 
 .PHONY: package
-package: $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
+package: $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_SYSTEMD_UNIT)
 
 
 .PHONY: install
 install: package
+	@rm -f $(INSTALL_AUTOSTART)
+	@if test -z "$(DESTDIR)"; then systemctl --global enable $(PROGRAM).service; fi
 	update-desktop-database $(DESTDIR)$(DATADIR)/applications
 	update-mime-database $(DESTDIR)$(DATADIR)/mime
 	glib-compile-schemas $(DESTDIR)$(DATADIR)/glib-2.0/schemas
@@ -103,13 +108,16 @@ $(INSTALL_APPLICATION): share/$(APPLICATION)
 	sed -E -e "s|/usr/bin/|$(BINDIR)/|g" $< > $@
 	@chmod 0644 $@
 
-$(INSTALL_AUTOSTART) : $(INSTALL_APPLICATION)
+
+$(INSTALL_SYSTEMD_UNIT): systemd/$(PROGRAM).service
 	@install --directory $(dir $@)
-	@install --mode 0644 $< $@
+	sed -E -e "s|/usr/bin/|$(BINDIR)/|g" $< > $@
+	@chmod 0644 $@
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATION) $(INSTALL_AUTOSTART)
+	@if test -z "$(DESTDIR)"; then systemctl --global disable $(PROGRAM).service || true; fi
+	rm -f $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_APPLICATION) $(INSTALL_AUTOSTART) $(INSTALL_SYSTEMD_UNIT)
 	update-desktop-database $(DESTDIR)$(DATADIR)/applications
 	update-mime-database $(DESTDIR)$(DATADIR)/mime
 	glib-compile-schemas $(DESTDIR)$(DATADIR)/glib-2.0/schemas
